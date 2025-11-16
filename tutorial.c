@@ -96,7 +96,7 @@ static void DrawKeyWithTriangle(float x_center, float y_center, float size, cons
 
 void Tutorial_Init(void)
 {
-    // --- UPDATED: Font name changed ---
+    // Load the font for this state
     tutorial_font = CP_Font_Load("Assets/Exo2-Regular.ttf");
     CP_Font_Set(tutorial_font);
 
@@ -105,7 +105,7 @@ void Tutorial_Init(void)
 
 void Tutorial_Update(void)
 {
-    CP_Graphics_ClearBackground(CP_Color_Create(0, 0, 0, 255));
+    CP_Graphics_ClearBackground(CP_Color_Create(20, 25, 28, 255));
 
     // --- Get Mouse ---
     float mouse_x = (float)CP_Input_GetMouseX();
@@ -237,7 +237,7 @@ void Tutorial_Update(void)
             }
         }
     }
-    else if (tutorialPage == 4)
+    else if (tutorialPage == 4) // *** UPDATED PAGE 4 LAYOUT ***
     {
         // --- Define a common Y for the top of the diagrams ---
         float diagram_top_y = panel_top + 130.0f;
@@ -245,7 +245,7 @@ void Tutorial_Update(void)
         float text_top_y = panel_top + 320.0f;
 
         // --- COLUMN 1: ARROW KEYS ---
-        // Define a center X for this column
+        // NEW: Define a center X for this column
         float col1_center_x = panel_left + (panel_w / 4.0f) + 40.0f; // Center of first quarter
         float key_size = 50.0f;
         float key_spacing = 5.0f;
@@ -267,7 +267,7 @@ void Tutorial_Update(void)
         DrawKeyWithTriangle(right_key_x, right_key_y, key_size, "RIGHT");
 
         // --- COLUMN 2: MOUSE ---
-        // Define a center X for this column
+        // NEW: Define a center X for this column
         float col2_center_x = panel_right - (panel_w / 4.0f) - 40.0f; // Center of last quarter
         float mouse_btn_w = 80.0f;
         float mouse_btn_h = 120.0f;
@@ -304,6 +304,7 @@ void Tutorial_Update(void)
         float back_btn_x = panel_left + 80.0f;
         float back_btn_y = panel_bottom - 45.0f;
         int hover_back = IsAreaClicked(back_btn_x, back_btn_y, TUTE_BUTTON_W, TUTE_BUTTON_H, mouse_x, mouse_y);
+        // Reset alignment for the button text (just in case)
         DrawTutorialButton("Back", back_btn_x, back_btn_y, TUTE_BUTTON_W, TUTE_BUTTON_H, hover_back, 24.0f);
 
         // --- Check for click ---
@@ -328,10 +329,9 @@ void Tutorial_Update(void)
 
 void Tutorial_Exit(void)
 {
-    // --- UPDATED: Free the tutorial font ---
+    // --- Fixes the memory leak ---
     if (tutorial_font)
     {
         CP_Font_Free(tutorial_font);
-        tutorial_font = 0;
     }
 }

@@ -1,131 +1,64 @@
+#include "cprocessing.h"
 #include "card.h"
 #include "utils.h"
-#include <stdlib.h> // For rand()
-#include "levels.h" // For Enemy struct
-#include "game.h"	// For Player struct and globals
-#include <stdio.h>  // For snprintf()
+#include <stdlib.h>
+#include "levels.h"
+#include "game.h"	
+#include <stdio.h>
+#include <math.h> // <-- FIX: Added for round()
 
-// --- CARD DRAWING ---
-
-void DrawCard(Card* hand, CP_Image* type_icons, CP_Image* effect_icons) {
-	// 1. Draw Card Background
+// --- MODIFIED: New DrawCard function ---
+void DrawCard(Card* hand) {
+	// 1. Check type for card background color
 	switch (hand->type) {
 	case Attack:
-		CP_Settings_Fill(CP_Color_Create(200, 50, 50, 255)); // Dark Red
+		CP_Settings_Fill(CP_Color_Create(255, 0, 0, 255));
 		break;
 	case Heal:
-		CP_Settings_Fill(CP_Color_Create(80, 172, 85, 255)); // Green
+		CP_Settings_Fill(CP_Color_Create(80, 172, 85, 255));
+		break;
+	case Shield:
+		CP_Settings_Fill(CP_Color_Create(0, 0, 255, 255));
 		break;
 	default:
 		CP_Settings_Fill(CP_Color_Create(100, 100, 100, 255));
 		break;
 	}
-	// set rect to draw from center
+
+	// 2. Draw the card rectangle (from center)
 	CP_Settings_RectMode(CP_POSITION_CENTER);
-	CP_Settings_Stroke(CP_Color_Create(255, 255, 255, 255)); // White border
-	CP_Settings_StrokeWeight(2.0f);
 	CP_Graphics_DrawRect(hand->pos.x, hand->pos.y, hand->card_w, hand->card_h);
-	CP_Settings_NoStroke();
 
-	// 2. Draw Card Title
-	CP_Font_Set(game_font);
+	// 3. Draw the description text (word-wrapped)
 	CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
-	CP_Settings_TextSize(18.0f);
-	CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_TOP);
-	CP_Font_DrawText(hand->title, hand->pos.x, hand->pos.y - (hand->card_h / 2.0f) + 10.0f);
+	CP_Settings_TextSize(16); // Small font size to fit on the card
+	CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_TOP); // Align text to the top-center
 
-	// 3. Draw Icons
-	// Type Icon (e.g., Sword)
-	if (type_icons[hand->type]) {
-		CP_Image_Draw(type_icons[hand->type], hand->pos.x - (hand->card_w / 2.0f) + 20.0f, hand->pos.y - 15.0f, 25.0f, 25.0f, 255);
-	}
-	// Effect Icon (e.g., Fire)
-	if (hand->effect != None && effect_icons[hand->effect]) {
-		CP_Image_Draw(effect_icons[hand->effect], hand->pos.x - (hand->card_w / 2.0f) + 20.0f, hand->pos.y + 30.0f, 25.0f, 25.0f, 255);
-	}
+	// Calculate the bounding box for the text
+	float padding = 10.0f;
+	float text_box_width = hand->card_w - (padding * 2);
+	// Calculate the top-left X and Y for the text box
+	float text_box_x = hand->pos.x - (text_box_width / 2.0f);
+	float text_box_y = hand->pos.y - (hand->card_h / 2.0f) + padding; // Start from the top
 
-	// 4. Draw Dynamic Description
-	char dynamic_description[128];
-	int final_power = (int)(hand->power * g_card_multiplier);
-	snprintf(dynamic_description, 128, hand->description_template, final_power);
-
-	CP_Settings_Fill(CP_Color_Create(230, 230, 230, 255)); // Light grey text
-	CP_Settings_TextSize(14.0f);
-	CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_BOTTOM);
-	CP_Font_DrawTextBox(dynamic_description, hand->pos.x - (hand->card_w / 2.0f) + 5.0f, hand->pos.y + 10.0f, hand->card_w - 10.0f);
+	// Use DrawTextBox for automatic word wrapping
+	CP_Font_DrawTextBox(hand->description, text_box_x, text_box_y, text_box_width);
 }
-
-// --- CARD ACTIONS ---
-
-void UseCard(Card* hand, int* selected_index, int* hand_size, Player* player_ptr, Enemy* enemy_ptr, Card* deck, int* deck_size, bool did_miss) {
-
-	int card_index = *selected_index;
-
-	// Get the base power from the card
-	int base_power = (int)hand[card_index].power;
-	// Calculate final power with multiplier
-	int final_power = (int)(base_power * g_card_multiplier);
-
-	// --- 1. Main Card Type Logic ---
-	if (hand[card_index].type == Attack) {
-		if (enemy_ptr->alive && !did_miss) {
-			enemy_ptr->health -= final_power;
-
-			// Lifesteal Logic
-			if (g_player_has_lifesteal) {
-				player_ptr->health += final_power;
-				if (player_ptr->health > player_ptr->max_health) {
-					player_ptr->health = player_ptr->max_health;
-				}
-			}
-		}
-		// (Health check is now in game.c after this function returns)
-	}
-	else if (hand[card_index].type == Heal) {
-		player_ptr->health += final_power;
-		// Clamp health to max_health
-		if (player_ptr->health > player_ptr->max_health) {
-			player_ptr->health = player_ptr->max_health;
-		}
-	}
-
-	// --- 2. Card Effect Logic ---
-	// (This runs in addition to the main type logic)
-	switch (hand[card_index].effect) {
-
-	case Draw:
-		// Draw 1 card from the deck
-		if (*deck_size > 0) {
-			DealFromDeck(deck, hand, deck_size, hand_size);
-			SetHandPos(hand, *hand_size);
-		}
-		break;
-
-	case DOT:
-		// Apply 3 turns of DOT to the enemy
-		if (enemy_ptr->alive && !did_miss) {
-			enemy_ptr->dot_timing = 3;
-		}
-		break;
-
-	case None:
-	default:
-		// Do no additional effect
-		break;
-	}
-}
+// --- END OF MODIFIED DrawCard ---
 
 
-// --- DECK & HAND MANAGEMENT ---
-
-void SelectCard(int index, int* selected) {
+// Maybe switch to pointer for select index
+// --- FIX: Added 'Card hand[]' to match card.h ---
+void SelectCard(int index, int* selected, Card hand[]) {
 	// if selected card is selected again, turn select flag to point to no card
 	if (*selected == index) {
 		*selected = -1;
 		return;
 	}
 	// else change index
+	// change selected index
 	*selected = index;
+
 }
 
 // calculate hand width for hand position
@@ -140,12 +73,16 @@ float HandWidth(Card hand[], int size, float margin) {
 
 void SetHandPos(Card* hand, int hand_size) {
 	float rectdelta = 0; // distance of the x coord of the middle of the first card
-	float hand_margin = 20.0f;
+	float hand_margin = 20;
 	float total_hand_width = HandWidth(hand, hand_size, hand_margin);
-	float hand_x = ((CP_System_GetWindowWidth() - total_hand_width) / 2.0f) + (hand[0].card_w / 2.0f);
-	float hand_y = 600.0f;
+	// calculate x coord of start of hand by taking the window width - width of hand - 2 to get starting of the hand coord
+	// we add hand[0].card_w to get the middle of first card
+	float hand_x = ((CP_System_GetWindowWidth() - total_hand_width) / 2.0f) + (hand[0].card_w / 2);
+	float hand_y = 600;
 
 	for (int i = 0; i < hand_size; ++i) {
+		if (hand[i].is_discarding) continue; // <-- MODIFIED: Skip cards animating to discard
+
 		hand[i].target_pos = CP_Vector_Set(hand_x + rectdelta, hand_y);
 		hand[i].is_animating = true; // enable animation for the card to move to target pos
 		rectdelta += hand_margin + hand[i].card_w; // set new distance from middle of first card
@@ -157,6 +94,7 @@ void ShuffleDeck(Card* deck, int deck_size) {
 	for (int i = deck_size - 1; i > 0; i--) {
 		// get swap index.
 		// get value [0, i]. so swapped indexes does not get swapped again
+		// special : it can choose itself
 		int j = rand() % (i + 1);
 		// swap
 		Card temp = deck[i];
@@ -166,14 +104,17 @@ void ShuffleDeck(Card* deck, int deck_size) {
 }
 
 
-void DealFromDeck(Card* deck, Card* hand, int* deck_size, int* hand_size) {
+// --- FIX: Changed 'hand' to 'hand_slot' to match card.h ---
+void DealFromDeck(Card* deck, Card* hand_slot, int* deck_size, int* hand_size) {
+	// wait i shuffle each draw??? why
+	// comment out maybe
 	if (*deck_size > 1) {
 		ShuffleDeck(deck, *deck_size);
 	}
 
 	// pass first card in deck to hand
-	hand[*hand_size] = deck[0];
-
+	// --- FIX: Use pointer 'hand_slot' ---
+	*hand_slot = deck[0];
 	// move rest of elements up one slot
 	for (int i = 0; i < *deck_size - 1; ++i) {
 		deck[i] = deck[i + 1];
@@ -182,6 +123,26 @@ void DealFromDeck(Card* deck, Card* hand, int* deck_size, int* hand_size) {
 	// decrement deck size and increment hand size
 	--(*deck_size);
 	++(*hand_size);
+}
+
+// --- MODIFIED: This function NOW ONLY handles EFFECTS and returns power ---
+int UseCard(Card* hand, int* selected_index, int* hand_size, Player* player_ptr, Enemy* enemy_ptr) {
+
+	int power = (int)round(hand[*selected_index].power); // Get the power value
+
+	// --- ALL DAMAGE/HEAL/SHIELD LOGIC HAS BEEN REMOVED FROM HERE ---
+	// --- IT IS NOW HANDLED IN GAME.C ---
+
+	// Handle card *effects*
+	switch (hand[*selected_index].effect) {
+	case DOT:
+		if (enemy_ptr) enemy_ptr->dot_timing = 3;
+		break;
+	default:
+		break;
+	}
+
+	return power; // Return the damage/heal/shield amount
 }
 
 void DiscardCard(Card* hand, int* selected_index, int* hand_size, Card* discard, int* discard_size) {
@@ -196,6 +157,7 @@ void DiscardCard(Card* hand, int* selected_index, int* hand_size, Card* discard,
 		hand[i] = hand[i + 1];
 	}
 
+
 	// decrement hand size
 	--(*hand_size);
 	// reset select index
@@ -203,21 +165,38 @@ void DiscardCard(Card* hand, int* selected_index, int* hand_size, Card* discard,
 }
 
 // assume deck size 0
+// can use pointers. or pass to deck randomly using rand()
 void RecycleDeck(Card* discard, Card* deck, int* discard_size, int* deck_size) {
+	// --- NEW: Get deck's top-left pos from game.c global ---
+	// (We know it's 50, 600 from game.c)
+	CP_Vector deck_pos_topleft = CP_Vector_Set(50, 600);
+	CP_Vector deck_pos_center = CP_Vector_Set(
+		deck_pos_topleft.x + CARD_W_INIT / 2.0f,
+		deck_pos_topleft.y + CARD_H_INIT / 2.0f
+	);
+
 	for (int i = 0; i < *discard_size; ++i) {
 		deck[i] = discard[i];
-		deck[i].pos = CP_Vector_Set(50, 600); // Reset position to the deck
+		deck[i].pos = deck_pos_center; // <-- MODIFIED: Use center position
+
+		// --- FIX: Reset card state fully ---
+		deck[i].is_discarding = false;
+		deck[i].is_animating = false;
+		deck[i].target_pos = CP_Vector_Set(0, 0);
+		// --- END FIX ---
+
 		++(*deck_size);
 	}
 	*discard_size = 0;
 	ShuffleDeck(deck, *deck_size);
 }
 
+//todo: card animation
 void AnimateMoveCard(Card* hand) {
 	// init dt for frame based animation
 	float dt = CP_System_GetDt();
 	// speed card move for animation
-	float speed = 900.0f;
+	float speed = 900;
 	// get the direction vector in terms of how far the card is from the target position
 	CP_Vector direction = CP_Vector_Subtract(hand->target_pos, hand->pos);
 	// get euclidean distance of card from pos through the direction vector
@@ -242,3 +221,11 @@ void AnimateMoveCard(Card* hand) {
 		hand->pos = CP_Vector_Add(hand->pos, move);
 	}
 }
+
+//void LoadCardIcon(void) {
+//	card_type_icon[Attack] = CP_Image_Load("Assets/sword.png");
+//	card_type_icon[Heal] = CP_Image_Load("Assets/suit_hearts.png");
+//
+//	card_effect_icon[DOT] = CP_Image_Load("Assets/fire.png");
+//	card_effect_icon[Draw] = CP_Image_Load("Assets/card_add.png");
+//}

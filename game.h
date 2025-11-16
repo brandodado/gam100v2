@@ -1,49 +1,53 @@
 #pragma once
-#include <stdbool.h>
 #include "cprocessing.h"
-// #include "card.h" // <-- REMOVED THIS LINE to fix circular dependency
+#include <stdbool.h> 
 
 // ---------------- Player Struct ----------------
-typedef struct {
+typedef struct Player {
     int health;
     int max_health;
     int attack;
-    int defense;
+    int shield;
+
+    // --- Player Buffs ---
+    bool has_lifesteal;
+    bool has_desperate_draw;
+    bool has_divine_strike;
+    bool has_shield_boost; // 25% shield buff
+
+    // --- MODIFIED: Added new Lvl 6 Buffs ---
+    bool has_attack_boost_35;
+    bool has_heal_boost_35;
+    bool has_shield_boost_35;
+
+
+    // --- Card Bonus Trackers ---
+    int attack_bonus;
+    int heal_bonus;
+    int shield_bonus;
+    int card_reward_count; // Tracks how many times card reward screen has appeared
 } Player;
 
-// --- Global Card Multiplier ---
-extern float g_card_multiplier;
+// --- Struct for floating damage/heal text ---
+#define MAX_FLOATING_TEXTS 20
+typedef struct {
+    char text[16];
+    CP_Vector pos;
+    CP_Color color;
+    float timer; // Lifetime in seconds
+} FloatingText;
 
-// --- Global Lifesteal Flag ---
-extern bool g_player_has_lifesteal;
+#ifndef GAME_H
+#define GAME_H
 
-// --- Global Card Draw Flag ---
-extern bool g_player_draw_bonus;
+void LoadLevel(int level);   // Declaration
 
-// --- Global Level Tracker ---
-extern int current_level;
+void ResetGame(void);        // If you call ResetGame from menu
 
-// --- Global Checkpoint Flag ---
-extern bool g_player_has_died;
-
-// --- Global Font ---
-extern CP_Font game_font;
-
+void ResetStageState(void);
 
 void Game_Init(void);
-
-// Declaration for our "checkpoint" init
-void Game_Init_At_Level_2_Shop(void);
-
 void Game_Update(void);
-
 void Game_Exit(void);
 
-// Public function to reset checkpoint
-void Game_ResetDeathFlag(void);
-
-// Public Game Logic Function
-void ExecuteLevelUpChoice(int health_bonus, float multiplier_increase, bool enable_lifesteal, bool enable_draw_bonus);
-
-// Made LoadLevel public so shop.c can call it
-void LoadLevel(int level);
+#endif

@@ -11,7 +11,6 @@
 
 #include "cprocessing.h"
 #include "mainmenu.h"
-#include "game.h"       // Include game.h
 #include <time.h>
 #include <stdlib.h>
 
@@ -25,8 +24,6 @@ int main(void)
 
     // Set the initial game state to the main menu
     CP_Engine_SetNextGameState(Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
-
-    // --- REMOVED THE SetShutdownCallback LINE ---
 
     // Run the engine (no arguments)
     CP_Engine_Run(60);

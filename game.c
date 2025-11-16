@@ -1,6 +1,4 @@
 ﻿#include <math.h>
-#include <string.h> // For strcmp
-#include <stdlib.h> // For rand()
 #include "cprocessing.h"
 #include "mainmenu.h"
 #include "utils.h"
@@ -9,208 +7,135 @@
 #include "levels.h"
 #include <stdio.h>
 #include "game.h"
-#include "shop.h" // Include the shop state
+#include "reward.h"
+#include "deck.h" 
+#include "gameover.h" 
+#include "buff_reward.h" 
 
-// Turn state enum
-typedef enum {
-    PLAYER_TURN,
-    ENEMY_TURN,
-    GAME_OVER
-} GameState;
-
-
-// init window size for circle position settings
-int window_w;
-int window_h;
+// ---------------------------------------------------------
+// 1. GLOBAL VARIABLES
+// ---------------------------------------------------------
 
 int selected_card_index;
 
-
 #define SELECT_BTN_W 200
 #define SELECT_BTN_H 100
-
-// Button defines for GAME_OVER screen
-#define CHOICE_BTN_W 400.0f
-#define CHOICE_BTN_H 100.0f
-
-CP_Vector select_btn_pos;
+#define MAX_LEVEL 9 
 
 CP_Vector deck_pos;
 CP_Vector discard_pos;
 
 int played_cards;
-
 int turn_num;
 bool drawn;
 
-int animate_index;
-
-
-float max_bar_width;
-
-#define MAX_HAND_SIZE 7	
-#define MAX_DECK_SIZE 25
-
+#define MAX_HAND_SIZE 7      
 Card hand[MAX_HAND_SIZE];
-Card deck[MAX_DECK_SIZE];
-int hand_size;
-int deck_size;
-
+Card draw_pile[MAX_DECK_SIZE];
+int draw_pile_size;
 Card discard[MAX_DECK_SIZE];
 int discard_size;
+int hand_size;
 
-// ---------------- Globals ----------------
+Deck player_deck;
+RewardState reward_state;
+BuffRewardState buff_reward_state;
 
-static Player player; // Set in Game_Init
+// --- Player/Game State ---
+#define START_ATTACK 7
+#define START_SHIELD 0 
+#define START_HEALTH 80 // <-- MODIFIED: Was 50
+#define INITIAL_DECK_SIZE 14 // (6 atk + 4 heal + 4 shield)
 
+// --- MODIFIED: Added new player fields ---
+static Player player = {
+    START_HEALTH, START_HEALTH, START_ATTACK, START_SHIELD,
+    false, false, false, false, // lifesteal, desperate_draw, divine_strike, shield_boost
+    false, false, false,        // attack_boost_35, heal_boost_35, shield_boost_35
+    0, 0, 0, 0                  // bonus trackers
+};
 static int selected_enemy = 0;
-static float hit_flash_timer[16] = { 0.0f };
-static float revive_text_timer[16] = { 0.0f };
-static float thief_steal_timer[16] = { 0.0f };
-static float dot_text_timer[16] = { 0.0f };
-
-static float player_miss_timer = 0.0f;
-static float enemy_miss_timer[16] = { 0.0f };
 
 static Enemy* current_enemies = NULL;
 static int current_enemy_count = 0;
-
-// --- UPDATED: Removed 'static' ---
-int current_level = 1;
+static int current_level = 1;
 
 static bool stage_cleared = false;
-static float stage_clear_timer = 0.0f;
+static float banner_timer = 0.0f;
+static bool reward_active = false;
+static bool buff_reward_active = false;
 
-// --- UPDATED: Removed 'static' ---
-CP_Font game_font = 0;
+// ... (Visual Effect globals, BattlePhase enum, etc. are unchanged) ...
+static float player_hit_flash = 0.0f;
+static float player_shield_flash = 0.0f;
+static float enemy_hit_flash[16] = { 0.0f };
+static float enemy_shield_flash[16] = { 0.0f };
 
-// --- Icon Globals ---
-static CP_Image card_type_icons[3];
-static CP_Image card_effect_icons[5];
+static FloatingText floating_texts[MAX_FLOATING_TEXTS];
+static int floating_text_count = 0;
 
+static CP_Font game_font;
+static CP_Image game_bg = NULL;
 
-static GameState current_turn;
+typedef enum {
+    PHASE_PLAYER,
+    PHASE_ENEMY
+} BattlePhase;
 
-// Definition of the global card multiplier
-float g_card_multiplier;
-
-// Definition of the global lifesteal flag
-bool g_player_has_lifesteal;
-
-// Definition of the global card draw flag
-bool g_player_draw_bonus;
-
-// Definition of the checkpoint flag
-bool g_player_has_died = false;
-
-// Globals for Enemy Animation
-static float enemy_turn_timer = 0.0f;
-static int enemy_action_index = 0;
-static float enemy_anim_offset_x = 0.0f;
-static bool enemy_has_hit = false;
+BattlePhase current_phase = PHASE_PLAYER;
+float enemy_turn_timer = 0.0f;
+int enemy_action_index = 0;
+float enemy_anim_offset_x = 0.0f;
+bool enemy_has_hit = false;
 
 
-// ---------------- Helpers ----------------
+// ---------------------------------------------------------
+// 2. HELPER FUNCTIONS
+// ---------------------------------------------------------
 
-// Helper function for miss chance
-static bool DidAttackMiss(void)
-{
-    return (rand() % 100) < 35;
+// ... (SpawnFloatingText, UpdateAndDrawFloatingText, AllEnemiesDefeated, DrawStageClearBanner, SyncDeckToArray are unchanged) ...
+static void SpawnFloatingText(const char* text, CP_Vector pos, CP_Color color) {
+    if (floating_text_count >= MAX_FLOATING_TEXTS) return;
+
+    FloatingText* ft = &floating_texts[floating_text_count];
+    snprintf(ft->text, sizeof(ft->text), "%s", text);
+    ft->pos = pos;
+    ft->color = color;
+    ft->timer = 1.0f; // 1 second lifetime
+    floating_text_count++;
 }
-
-// --- UPDATED: Removed 'static' ---
-void LoadLevel(int level) {
-    Enemy* new_enemies = NULL;
-    int new_enemy_count = 0;
-
-    if (level == 1) {
-        new_enemies = level1_enemies;
-        new_enemy_count = level1_enemy_count;
-    }
-    else if (level == 2) {
-        new_enemies = level2_enemies;
-        new_enemy_count = level2_enemy_count;
-    }
-    else if (level == 3) {
-        new_enemies = level3_enemies;
-        new_enemy_count = level3_enemy_count;
-    }
-    else {
-        // No more levels → back to menu
-        CP_Engine_SetNextGameState(Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
-        return; // <-- Fix for NULL pointer
-    }
-
-    current_enemies = new_enemies;
-    current_enemy_count = new_enemy_count;
-
-    // Reset per-level state
-    selected_enemy = 0;
-    player_miss_timer = 0.0f;
-    for (int i = 0; i < 16; i++) {
-        hit_flash_timer[i] = 0.0f;
-        revive_text_timer[i] = 0.0f;
-        thief_steal_timer[i] = 0.0f;
-        enemy_miss_timer[i] = 0.0f;
-        dot_text_timer[i] = 0.0f;
-    }
-    stage_cleared = false;
-    stage_clear_timer = 0.0f;
-
-    // Reset animation state
-    enemy_turn_timer = 0.0f;
-    enemy_action_index = 0;
-    enemy_anim_offset_x = 0.0f;
-    enemy_has_hit = false;
-}
-
-// Helper function to draw buttons on the game over screen
-static void DrawChoiceButton(const char* text, float x, float y, float w, float h, int is_hovered)
-{
-    CP_Settings_RectMode(CP_POSITION_CENTER);
-
-    // Draw button rectangle
-    if (is_hovered) {
-        CP_Settings_Fill(CP_Color_Create(150, 150, 150, 255)); // Brighter
-    }
-    else {
-        CP_Settings_Fill(CP_Color_Create(80, 80, 80, 255)); // Dark gray
-    }
-
-    CP_Settings_StrokeWeight(2.0f);
-    CP_Settings_Stroke(CP_Color_Create(200, 200, 200, 255));
-    CP_Graphics_DrawRect(x, y, w, h);
-
-    // Draw button text
-    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
-    CP_Font_Set(game_font);
-    CP_Settings_TextSize(24.0f);
+static void UpdateAndDrawFloatingText(void) {
+    float dt = CP_System_GetDt();
+    CP_Settings_TextSize(32);
     CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-    CP_Font_DrawText(text, x, y + 2.0f);
-}
+    CP_Font_Set(game_font);
 
-// --- UPDATED: Removed 'static' ---
-void ExecuteLevelUpChoice(int health_bonus, float multiplier_increase, bool enable_lifesteal, bool enable_draw_bonus)
-{
-    // Apply the chosen stats
-    g_card_multiplier += multiplier_increase;
-    player.max_health += health_bonus;
+    for (int i = 0; i < floating_text_count; i++) {
+        FloatingText* ft = &floating_texts[i];
+        ft->timer -= dt;
 
-    if (enable_lifesteal) {
-        g_player_has_lifesteal = true;
+        if (ft->timer <= 0.0f) {
+            // Remove this element by swapping with the last
+            floating_texts[i] = floating_texts[floating_text_count - 1];
+            floating_text_count--;
+            i--; // Re-check the new element at this index
+            continue;
+        }
+
+        // Update position (float up)
+        ft->pos.y -= 20.0f * dt;
+
+        // Set color with fade-out
+        CP_Color color = ft->color;
+        color.a = (int)(255.0f * ft->timer); // Fade out
+        CP_Settings_Fill(color);
+
+        // Draw
+        CP_Font_DrawText(ft->text, ft->pos.x, ft->pos.y);
     }
-    if (enable_draw_bonus) {
-        g_player_draw_bonus = true;
-    }
 }
-
-// --- UPDATED: Removed 'static' ---
-void Game_ResetDeathFlag(void)
-{
-    g_player_has_died = false;
-}
-
 static bool AllEnemiesDefeated(void) {
+    if (!current_enemies) return false; // Safety check
     for (int i = 0; i < current_enemy_count; i++) {
         if (current_enemies[i].alive && current_enemies[i].health > 0) {
             return false;
@@ -218,460 +143,601 @@ static bool AllEnemiesDefeated(void) {
     }
     return true;
 }
+void DrawStageClearBanner(void) {
+    CP_Settings_Fill(CP_Color_Create(255, 255, 0, 255));
+    CP_Settings_TextSize(48);
+    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
+    CP_Font_DrawText("STAGE CLEARED!", CP_System_GetWindowWidth() / 2.0f, CP_System_GetWindowHeight() / 2.0f);
+}
+void SyncDeckToArray(void) {
+    draw_pile_size = 0;
+    discard_size = 0;
+    hand_size = 0;
 
-static void HandleInput(void) {
-    // Targeting controls
-    if (CP_Input_KeyTriggered(KEY_LEFT)) {
-        selected_enemy--;
-        if (selected_enemy < 0) selected_enemy = current_enemy_count - 1;
+    CP_Vector deck_pos_center = CP_Vector_Set(deck_pos.x + CARD_W_INIT / 2.0f, deck_pos.y + CARD_H_INIT / 2.0f);
+
+    for (int i = 0; i < player_deck.size && i < MAX_DECK_SIZE; i++) {
+        draw_pile[i] = player_deck.cards[i];
+        draw_pile[i].pos = deck_pos_center; // Set spawn pos
     }
-    if (CP_Input_KeyTriggered(KEY_RIGHT)) {
-        selected_enemy++;
-        if (selected_enemy >= current_enemy_count) selected_enemy = 0;
+    draw_pile_size = player_deck.size;
+}
+
+
+void ResetStageState(void) {
+    // ... (ResetStageState is unchanged, it already resets buff_reward_active) ...
+    selected_enemy = 0; // Default to first enemy
+    for (int i = 0; i < 16; i++) {
+        enemy_hit_flash[i] = 0.0f;
+        enemy_shield_flash[i] = 0.0f;
+    }
+    player_hit_flash = 0.0f;
+    player_shield_flash = 0.0f;
+    floating_text_count = 0;
+
+    stage_cleared = false;
+    reward_active = false;
+    buff_reward_active = false; // <-- NEW: Reset buff flag
+    banner_timer = 0.0f;
+
+    current_phase = PHASE_PLAYER;
+    enemy_anim_offset_x = 0.0f;
+    enemy_has_hit = false;
+
+    player.shield = START_SHIELD; // Reset shield
+
+    ResetReward(&reward_state);
+    ResetBuffReward(&buff_reward_state); // <-- NEW: Reset buff state
+}
+
+void ResetGame(void) {
+    player.health = START_HEALTH;
+    player.max_health = START_HEALTH;
+    player.attack = START_ATTACK;
+    player.shield = START_SHIELD;
+
+    // --- MODIFIED: Reset all new fields ---
+    player.has_lifesteal = false;
+    player.has_desperate_draw = false;
+    player.has_divine_strike = false;
+    player.has_shield_boost = false;
+    player.has_attack_boost_35 = false; // <-- MODIFIED
+    player.has_heal_boost_35 = false;   // <-- MODIFIED
+    player.has_shield_boost_35 = false; // <-- MODIFIED
+    player.attack_bonus = 0;
+    player.heal_bonus = 0;
+    player.shield_bonus = 0;
+    player.card_reward_count = 0;
+    // --- END MODIFICATION ---
+
+    draw_pile_size = INITIAL_DECK_SIZE;
+    discard_size = 0;
+    hand_size = 0;
+    selected_card_index = -1;
+    played_cards = 0;
+    drawn = false;
+
+    turn_num = 0;
+    current_level = 1;
+    current_enemy_count = 0;
+    current_enemies = NULL;
+
+    InitDeck(&player_deck);
+
+    ResetStageState();
+}
+
+void LoadLevel(int level) {
+    if (level > MAX_LEVEL) {
+        // --- NEW: Victory Condition ---
+        ResetGame();
+        CP_Engine_SetNextGameState(Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
+        return;
     }
 
-    // Attack selected enemy
-    if (CP_Input_KeyTriggered(KEY_SPACE)) {
-        if (current_enemy_count > 0) {
-            Enemy* e = &current_enemies[selected_enemy];
-            if (e->alive) {
+    current_enemies = NULL;
+    current_enemy_count = 0;
+    current_level = level;
 
-                if (DidAttackMiss()) {
-                    enemy_miss_timer[selected_enemy] = 1.5f; // Show "MISS!"
-                }
-                else {
-                    e->health -= player.attack;
-                    if (e->health <= 0) {
-                        e->health = 0;
-                        e->alive = false;
-                    }
-                    if (e->alive && selected_enemy >= 0 && selected_enemy < 16)
-                        hit_flash_timer[selected_enemy] = 0.2f;
-                }
+    SyncDeckToArray();
+
+    drawn = false;
+    turn_num = 0;
+    played_cards = 0;
+    current_phase = PHASE_PLAYER;
+
+    // --- MODIFIED: Load levels 1-9 ---
+    if (level == 1) {
+        current_enemies = level1_enemies;
+        current_enemy_count = level1_enemy_count;
+    }
+    else if (level == 2) {
+        current_enemies = level2_enemies;
+        current_enemy_count = level2_enemy_count;
+    }
+    else if (level == 3) {
+        current_enemies = level3_enemies;
+        current_enemy_count = level3_enemy_count;
+    }
+    else if (level == 4) {
+        current_enemies = level4_enemies;
+        current_enemy_count = level4_enemy_count;
+    }
+    else if (level == 5) {
+        current_enemies = level5_enemies;
+        current_enemy_count = level5_enemy_count;
+    }
+    else if (level == 6) {
+        current_enemies = level6_enemies;
+        current_enemy_count = level6_enemy_count;
+    }
+    else if (level == 7) {
+        current_enemies = level7_enemies;
+        current_enemy_count = level7_enemy_count;
+    }
+    else if (level == 8) {
+        current_enemies = level8_enemies;
+        current_enemy_count = level8_enemy_count;
+    }
+    else if (level == 9) {
+        current_enemies = level9_enemies;
+        current_enemy_count = level9_enemy_count;
+    }
+
+
+    // Revive and reset enemies for the level
+    if (current_enemies && current_enemy_count > 0) {
+        for (int i = 0; i < current_enemy_count; i++) {
+            current_enemies[i].health = current_enemies[i].max_health;
+            current_enemies[i].shield = 0; // Reset shield
+            current_enemies[i].alive = true;
+            current_enemies[i].has_used_special = false; // <-- MODIFIED: Reset special flag
+            // --- MODIFIED: Reset attack for enrage bosses ---
+            if (current_enemies[i].enrages) {
+                current_enemies[i].attack = current_enemies[i].max_attack;
             }
         }
     }
+
+    ResetStageState();
 }
 
-static void UpdateStageClear(void) {
-    // Trigger stage clear once, then run timer and advance
-    if (!stage_cleared && AllEnemiesDefeated() && current_enemy_count > 0) {
-        stage_cleared = true;
-        stage_clear_timer = 2.0f; // seconds
+static void HandleEnemySelection(void) {
+    int current_selection = selected_enemy;
+    int original_selection = selected_enemy;
+
+    if (CP_Input_KeyTriggered(KEY_LEFT)) {
+        // Loop backwards to find next living enemy
+        current_selection--;
+        while (current_selection != original_selection) {
+            if (current_selection < 0) current_selection = current_enemy_count - 1;
+            if (current_enemies[current_selection].alive) {
+                selected_enemy = current_selection;
+                return;
+            }
+            current_selection--;
+        }
     }
-
-    if (stage_cleared) {
-        stage_clear_timer -= CP_System_GetDt();
-        if (stage_clear_timer <= 0.0f) {
-            stage_cleared = false;
-
-            // Set the state to the new Shop
-            CP_Engine_SetNextGameState(Shop_Init, Shop_Update, Shop_Exit);
+    if (CP_Input_KeyTriggered(KEY_RIGHT)) {
+        // Loop forwards to find next living enemy
+        current_selection++;
+        while (current_selection != original_selection) {
+            if (current_selection >= current_enemy_count) current_selection = 0;
+            if (current_enemies[current_selection].alive) {
+                selected_enemy = current_selection;
+                return;
+            }
+            current_selection++;
         }
     }
 }
 
-static void DrawEntity(const char* name, int health, int max_health,
-    int attack, int defense,
-    float x, float y, float w, float h,
-    CP_Color model_color,
-    int is_selected)
-{
-    // Always use corner mode for entity drawing
-    CP_Settings_RectMode(CP_POSITION_CORNER);
+// --- MODIFIED: Passes Player* to reward generators ---
+static int UpdateStageClear(void) {
+    if (!stage_cleared && !reward_active && !buff_reward_active && AllEnemiesDefeated() && current_enemy_count > 0) {
+        stage_cleared = true;
+        banner_timer = 2.0f;
+    }
+    if (stage_cleared) {
+        if (banner_timer > 0.0f) {
+            banner_timer -= CP_System_GetDt();
+            DrawStageClearBanner();
+            return 1;
+        }
+        else {
+            stage_cleared = false;
+            if (current_level == 3 || current_level == 6 || current_level == 9) {
+                buff_reward_active = true;
+                // --- FIX: Pass current_level ---
+                GenerateBuffOptions(&buff_reward_state, current_level);
+            }
+            else {
+                reward_active = true;
+                // --- FIX: Generate rewards BEFORE incrementing count ---
+                GenerateRewardOptions(&reward_state, &player);
+                // --- FIX: Moved player.card_reward_count++ to ApplyRewardSelection ---
+            }
+            return 1;
+        }
+    }
 
-    // Glow outline if selected
+    if (reward_active) {
+        UpdateReward(&reward_state, &player_deck, &player);
+        DrawReward(&reward_state, &player);
+        if (reward_state.reward_claimed) {
+            reward_active = false;
+            LoadLevel(current_level + 1);
+        }
+        return 1;
+    }
+
+    if (buff_reward_active) {
+        UpdateBuffReward(&buff_reward_state, &player);
+        DrawBuffReward(&buff_reward_state);
+        if (buff_reward_state.reward_claimed) {
+            buff_reward_active = false;
+            LoadLevel(current_level + 1);
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+static void DrawEntity(const char* name, int health, int max_health,
+    int attack, int shield, float x, float y, float w, float h,
+    CP_Color model_color, int is_selected, float hit_flash_timer, float shield_flash_timer)
+{
+    // --- FIX: Initialize clamped_health properly ---
+    int clamped_health = (health < 0) ? 0 : health;
+    if (clamped_health > max_health) clamped_health = max_health;
+
+    float ratio = (max_health > 0) ? ((float)clamped_health / (float)max_health) : 0.0f;
+
+    // 1. Draw Selection Border (if selected)
+    CP_Settings_RectMode(CP_POSITION_CORNER);
     if (is_selected) {
         CP_Settings_StrokeWeight(4.0f);
-        CP_Settings_Stroke(CP_Color_Create(255, 255, 0, 255)); // yellow glow
+        CP_Settings_Stroke(CP_Color_Create(255, 255, 0, 255));
         CP_Graphics_DrawRect(x - 4.0f, y - 4.0f, w + 8.0f, h + 8.0f);
     }
-    // Reset stroke for normal draws
+
+    // 2. Draw Hit/Shield Flash (behind model)
+    if (hit_flash_timer > 0.0f) {
+        CP_Settings_Fill(CP_Color_Create(255, 0, 0, 150 + (int)(hit_flash_timer * 105.0f)));
+        CP_Graphics_DrawRect(x - 8.0f, y - 8.0f, w + 16.0f, h + 16.0f);
+    }
+    else if (shield_flash_timer > 0.0f) {
+        CP_Settings_Fill(CP_Color_Create(0, 150, 255, 150 + (int)(shield_flash_timer * 105.0f)));
+        CP_Graphics_DrawRect(x - 8.0f, y - 8.0f, w + 16.0f, h + 16.0f);
+    }
     CP_Settings_StrokeWeight(0);
 
-    // Logic for Hit Flash
-    if (hit_flash_timer[selected_enemy] > 0.0f && is_selected) {
-        model_color = CP_Color_Create(255, 0, 0, 255); // Flash Red
-        hit_flash_timer[selected_enemy] -= CP_System_GetDt();
-    }
-
-    // Clamp health for bar fill (but show actual values in text)
-    int clamped_health = health;
-    if (clamped_health < 0) clamped_health = 0;
-    if (clamped_health > max_health) clamped_health = max_health;
-    float ratio = (max_health > 0) ? (float)clamped_health / (float)max_health : 0.0f;
-
-    // Entity model
+    // 3. Draw Model
     CP_Settings_Fill(model_color);
     CP_Graphics_DrawRect(x, y, w, h);
 
-    // Name directly above entity, centered
-    CP_Font_Set(game_font);
-    CP_Settings_TextSize(20);
-    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
-    CP_Font_DrawText(name, x + w * 0.5f, y - 20.0f);
-
-    // HP bar snug below entity
+    // 4. Draw HP Bar
     float bar_h = 16.0f;
     float bar_y = y + h + 4.0f;
-
-    // Bar background
     CP_Settings_Fill(CP_Color_Create(70, 70, 70, 255));
     CP_Graphics_DrawRect(x, bar_y, w, bar_h);
 
-    // Bar fill
     CP_Color hp_color = (ratio > 0.6f) ? CP_Color_Create(0, 200, 0, 255)
         : (ratio > 0.3f) ? CP_Color_Create(255, 200, 0, 255)
         : CP_Color_Create(200, 0, 0, 255);
     CP_Settings_Fill(hp_color);
     CP_Graphics_DrawRect(x, bar_y, w * ratio, bar_h);
 
-    // HP text centered inside the bar
-    char hp_text[32];
-    snprintf(hp_text, sizeof(hp_text), "%d/%d", health, max_health);
-    CP_Settings_TextSize(16);
-    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
-    CP_Font_DrawText(hp_text, x + w * 0.5f, bar_y + bar_h * 0.5f + 2.0f);
-
-    // Stats directly below HP bar
-    CP_Settings_TextSize(18);
-
-    // ATK
-    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_LEFT, CP_TEXT_ALIGN_V_MIDDLE);
-    CP_Settings_Fill(CP_Color_Create(255, 80, 80, 255));
-    char atk_text[32]; snprintf(atk_text, sizeof(atk_text), "ATK: %d", attack);
-    CP_Font_DrawText(atk_text, x + 6.0f, bar_y + bar_h + 18.0f);
-
-    // DEF
-    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_LEFT, CP_TEXT_ALIGN_V_MIDDLE);
-    CP_Settings_Fill(CP_Color_Create(80, 120, 255, 255));
-    char def_text[32]; snprintf(def_text, sizeof(def_text), "DEF: %d", defense);
-    CP_Font_DrawText(def_text, x + w * 0.5f, bar_y + bar_h + 18.0f);
-}
-
-static void DrawPlayer(Player* p, float ww, float wh) {
-    DrawEntity("Player", player.health, player.max_health,
-        player.attack, player.defense,
-        100.0f, wh / 2.0f - 100.0f, 150.0f, 200.0f,
-        CP_Color_Create(50, 50, 150, 255),
-        selected_enemy == -1); // highlight player if no enemy selected
-}
-
-static void DrawEnemy(Enemy* e, int index,
-    float x, float y, float w, float h) {
-    DrawEntity(e->name, e->health, e->max_health,
-        e->attack, e->defense,
-        x, y, w, h,
-        CP_Color_Create(120, 120, 120, 255),
-        selected_enemy == index); // highlight if this enemy is selected
-}
-
-static void DrawHUD(float ww, float wh) {
-    // Debug overlay
-    char debug[128];
-    snprintf(debug, sizeof(debug), "Level %d | Enemies %d", current_level, current_enemy_count);
-    CP_Settings_Fill(CP_Color_Create(255, 255, 0, 255));
+    // 5. Draw Text (Name & HP)
     CP_Font_Set(game_font);
     CP_Settings_TextSize(20);
-    CP_Font_DrawText(debug, 20.0f, 35.0f);
+    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
+    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
+    CP_Font_DrawText(name, x + w * 0.5f, y - 20.0f);
 
-    // Stage clear banner
-    if (stage_cleared) {
-        CP_Settings_Fill(CP_Color_Create(255, 255, 0, 255));
-        CP_Settings_TextSize(36);
-        CP_Font_DrawText("STAGE CLEARED!", ww / 2.0f - 120.0f, wh / 2.0f);
+    char hp_text[32];
+    snprintf(hp_text, sizeof(hp_text), "%d/%d", clamped_health, max_health); // <-- Use clamped_health
+    CP_Settings_TextSize(16);
+    CP_Font_DrawText(hp_text, x + w * 0.5f, bar_y + bar_h * 0.5f + 2.0f);
+
+    // 6. Draw Stats (ATK & Shield)
+    CP_Settings_TextSize(18);
+    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_LEFT, CP_TEXT_ALIGN_V_TOP);
+    float stats_y = bar_y + bar_h + 10.0f;
+
+    // ATK (Red)
+    CP_Settings_Fill(CP_Color_Create(255, 80, 80, 255));
+    char atk_text[32]; snprintf(atk_text, sizeof(atk_text), "ATK: %d", attack);
+    CP_Font_DrawText(atk_text, x, stats_y);
+
+    // Shield (Blue) - Draw dynamically
+    if (shield > 0) {
+        CP_Settings_Fill(CP_Color_Create(80, 120, 255, 255));
+        char shield_text[32]; snprintf(shield_text, sizeof(shield_text), "SHD: %d", shield);
+        CP_Font_DrawText(shield_text, x + (w * 0.5f) + 10.0f, stats_y);
     }
 }
 
-static void UpdateEnemyTurn(void)
-{
+
+void UpdateEnemyTurn(void) {
+    if (!current_enemies) { // Safety check
+        current_phase = PHASE_PLAYER;
+        return;
+    }
+
     float dt = CP_System_GetDt();
     enemy_turn_timer += dt;
 
-    // --- 1. Check if all enemies have acted ---
+    // Check if all enemies have acted
     if (enemy_action_index >= current_enemy_count) {
-        current_turn = PLAYER_TURN;
+        current_phase = PHASE_PLAYER;
         turn_num++;
         played_cards = 0;
         drawn = false;
-        return; // This enemy turn is over
+        enemy_anim_offset_x = 0.0f;
+        enemy_has_hit = false;
+
+        // --- MODIFIED: Added Enrage mechanic at start of player turn ---
+        if (current_enemies) {
+            for (int i = 0; i < current_enemy_count; i++) {
+                if (current_enemies[i].alive && current_enemies[i].enrages) {
+                    current_enemies[i].attack += current_enemies[i].enrage_amount; // <-- Use enrage_amount
+
+                    // Spawn floating text
+                    float ww = (float)CP_System_GetWindowWidth();
+                    float wh = (float)CP_System_GetWindowHeight();
+                    float enemy_width = 120.0f;
+                    float spacing = 40.0f;
+                    float total_width = (float)current_enemy_count * enemy_width + ((float)current_enemy_count - 1.0f) * spacing;
+                    float start_x = ww - total_width - 200.0f;
+                    float enemy_x = start_x + (float)i * (enemy_width + spacing);
+                    float enemy_y = wh / 2.0f - 160.0f / 2.0f;
+
+                    char enrage_text[16]; // <-- Create dynamic text
+                    snprintf(enrage_text, sizeof(enrage_text), "ATK +%d", current_enemies[i].enrage_amount);
+                    SpawnFloatingText(enrage_text, CP_Vector_Set(enemy_x + 60.0f, enemy_y), CP_Color_Create(255, 100, 100, 255));
+                }
+            }
+        }
+        // --- END MODIFICATION ---
+
+        return;
     }
 
-    // --- 2. Get the current acting enemy ---
     Enemy* e = &current_enemies[enemy_action_index];
 
-    // --- 3. Skip dead enemies ---
+    // Skip dead enemies
     if (!e->alive) {
         enemy_action_index++;
         enemy_turn_timer = 0.0f;
-        return; // Go to the next enemy
-    }
-
-    // --- 4. Lunge Forward (Animation) ---
-    if (enemy_turn_timer < 0.3f) {
-        float ratio = enemy_turn_timer / 0.3f;
-        enemy_anim_offset_x = -200.0f * ratio; // Move left
-    }
-    // --- 5. Hit Frame (Apply AI Logic) ---
-    else if (!enemy_has_hit)
-    {
-        // --- Apply DOT Damage ---
-        if (e->dot_timing > 0) {
-            int dot_damage = 5; // Base DOT damage
-            e->health -= dot_damage;
-            dot_text_timer[enemy_action_index] = 1.0f; // Show "DOT!" text
-            e->dot_timing--; // Decrement DOT timer
-            if (e->health <= 0) {
-                e->alive = false;
-            }
-        }
-
-        // Only perform main action if still alive after DOT
-        if (e->alive) {
-            // --- WITCH AI ---
-            if (strcmp(e->name, "Witch") == 0)
-            {
-                // Try to find a dead ally
-                int dead_ally_index = -1;
-                for (int j = 0; j < current_enemy_count; j++) {
-                    if (!current_enemies[j].alive) {
-                        dead_ally_index = j;
-                        break;
-                    }
-                }
-
-                if (dead_ally_index != -1)
-                {
-                    // --- Revive the ally ---
-                    current_enemies[dead_ally_index].alive = true;
-                    current_enemies[dead_ally_index].health = current_enemies[dead_ally_index].max_health / 2;
-                    revive_text_timer[dead_ally_index] = 1.5f;
-                }
-                else {
-                    // If no one to revive, just attack
-                    if (DidAttackMiss()) {
-                        player_miss_timer = 1.5f; // Player dodged
-                    }
-                    else {
-                        int damage = e->attack - player.defense;
-                        if (damage < 1) damage = 1;
-                        player.health -= damage;
-                    }
-                }
-            }
-            // --- GOBLIN THIEF AI ---
-            else if (strcmp(e->name, "Goblin Thief") == 0)
-            {
-                // Special Ability: Discard from Hand
-                if (hand_size > 0) {
-                    int card_to_steal_index = 0; // Steal the first card
-                    DiscardCard(hand, &card_to_steal_index, &hand_size, discard, &discard_size);
-                    SetHandPos(hand, hand_size); // Re-center the hand
-                    thief_steal_timer[enemy_action_index] = 1.5f; // Trigger the UI
-                }
-
-                // Standard Attack
-                if (DidAttackMiss()) {
-                    player_miss_timer = 1.5f; // Player dodged
-                }
-                else {
-                    int damage = e->attack - player.defense;
-                    if (damage < 1) damage = 1;
-                    player.health -= damage;
-                }
-            }
-            // --- ORC/SLIME (Standard Attack) ---
-            else
-            {
-                if (DidAttackMiss()) {
-                    player_miss_timer = 1.5f; // Player dodged
-                }
-                else {
-                    int damage = e->attack - player.defense;
-                    if (damage < 1) damage = 1;
-                    player.health -= damage;
-                }
-            }
-        }
-
-        // --- End of AI Logic ---
-        enemy_has_hit = true;
-        enemy_anim_offset_x = -200.0f; // Hold at max lunge
-    }
-    // --- 6. Lunge Back (Animation) ---
-    else if (enemy_turn_timer < 0.6f) {
-        float ratio = (enemy_turn_timer - 0.3f) / 0.3f; // 0.0 to 1.0
-        enemy_anim_offset_x = -200.0f * (1.0f - ratio); // Move right
-    }
-    // --- 7. Action Finished (Move to next enemy) ---
-    else {
-        enemy_action_index++;       // Move to next enemy
-        enemy_turn_timer = 0.0f;    // Reset timer
-        enemy_anim_offset_x = 0.0f; // Reset position
-        enemy_has_hit = false;    // Reset hit flag
-    }
-
-    // --- 8. CHECK FOR PLAYER DEATH (Immediate) ---
-    if (player.health <= 0)
-    {
-        current_turn = GAME_OVER;
         return;
     }
+
+    // --- NEW: Necromancer (Witch) Logic ---
+    // --- MODIFIED: Added !e->has_used_special check ---
+    if (e->is_necromancer && !e->has_used_special) {
+        bool revived_ally = false;
+        // Check if any allies are dead
+        for (int i = 0; i < current_enemy_count; i++) {
+            if (i != enemy_action_index && !current_enemies[i].alive) {
+                // Found a dead ally. Revive them!
+                revived_ally = true;
+                current_enemies[i].alive = true;
+                current_enemies[i].health = current_enemies[i].max_health / 2; // Revive at half health
+
+                // Spawn floating text over the revived enemy
+                float ww = (float)CP_System_GetWindowWidth();
+                float wh = (float)CP_System_GetWindowHeight();
+                float enemy_width = 120.0f;
+                float spacing = 40.0f;
+                float total_width = (float)current_enemy_count * enemy_width + ((float)current_enemy_count - 1.0f) * spacing;
+                float start_x = ww - total_width - 200.0f;
+                float enemy_x = start_x + (float)i * (enemy_width + spacing);
+                float enemy_y = wh / 2.0f - 160.0f / 2.0f;
+                SpawnFloatingText("Revived!", CP_Vector_Set(enemy_x + 60.0f, enemy_y), CP_Color_Create(80, 255, 80, 255));
+
+                e->has_used_special = true; // <-- MODIFIED: Set flag
+
+                // Move to next enemy's turn
+                enemy_action_index++;
+                enemy_turn_timer = 0.0f;
+                return; // Skip the attack logic
+            }
+        }
+        // If no allies were revived, just do a normal attack
+    }
+    // --- END: Necromancer Logic ---
+
+
+    // --- Enemy Attack Animation & Logic ---
+    if (enemy_turn_timer < 0.3f) { // Lunge
+        float ratio = enemy_turn_timer / 0.3f;
+        enemy_anim_offset_x = -200.0f * ratio;
+    }
+    else if (!enemy_has_hit) { // Hit
+        enemy_has_hit = true;
+        enemy_anim_offset_x = -200.0f;
+
+        int damage_to_deal = e->attack;
+        int damage_blocked = 0;
+        int damage_dealt = 0;
+
+        // Calculate shield block
+        if (player.shield > 0) {
+            damage_blocked = (damage_to_deal <= player.shield) ? damage_to_deal : player.shield;
+            player.shield -= damage_blocked;
+            player_shield_flash = 0.2f;
+        }
+
+        // Calculate final damage to health
+        damage_dealt = damage_to_deal - damage_blocked;
+        if (damage_dealt > 0) {
+            player.health -= damage_dealt;
+            player_hit_flash = 0.2f;
+
+            char text[16];
+            snprintf(text, sizeof(text), "-%d", damage_dealt);
+            SpawnFloatingText(text, CP_Vector_Set(175.0f, CP_System_GetWindowHeight() / 2.0f), CP_Color_Create(255, 80, 80, 255));
+        }
+        else {
+            SpawnFloatingText("Block!", CP_Vector_Set(175.0f, CP_System_GetWindowHeight() / 2.0f), CP_Color_Create(150, 150, 255, 255));
+        }
+
+    }
+    else if (enemy_turn_timer < 0.6f) { // Retreat
+        float ratio = (enemy_turn_timer - 0.3f) / 0.3f;
+        enemy_anim_offset_x = -200.0f * (1.0f - ratio);
+    }
+    else { // Move to next enemy
+        enemy_action_index++;
+        enemy_turn_timer = 0.0f;
+        enemy_anim_offset_x = 0.0f;
+        enemy_has_hit = false;
+    }
 }
 
-// --- NEW: Helper to load card icons ---
-static void LoadCardIcons(void)
-{
-    // These paths must be correct in your project
-    card_type_icons[Attack] = CP_Image_Load("Assets/sword.png");
-    card_type_icons[Heal] = CP_Image_Load("Assets/suit_hearts.png");
-    // card_type_icons[Shield] = CP_Image_Load("Assets/shield.png"); // If you add shield back
-
-    card_effect_icons[None] = NULL;
-    card_effect_icons[DOT] = CP_Image_Load("Assets/fire.png");
-    card_effect_icons[Draw] = CP_Image_Load("Assets/card_add.png");
-}
+// ---------------------------------------------------------
+// 3. INITIALIZATION
+// ---------------------------------------------------------
 
 void Game_Init(void)
 {
-    // --- Reset all player stats ---
-    player.health = 80;
-    player.max_health = 80;
-    player.attack = 7;
-    player.defense = 0;
-    g_card_multiplier = 1.0f;
-    g_player_has_lifesteal = false;
-    g_player_draw_bonus = false;
-    g_player_has_died = false;
-
-    current_level = 1;
-    LoadLevel(current_level);
-
-    // --- Load font ONCE ---
-    if (game_font == 0) {
-        game_font = CP_Font_Load("Assets/Exo2-Regular.ttf");
-        if (game_font == 0) {
-            printf("Font failed to load!\n");
-        }
-    }
-    CP_Font_Set(game_font); // Always set it as active
-    CP_Settings_TextSize(24);
-
-    // --- NEW: Load card icons ---
-    LoadCardIcons();
-
-    if (current_enemies == NULL || current_enemy_count <= 0) {
-        static Enemy fallback[] = { { "Fallback", 10, 10, 1, 0, true, 0 } }; // Added 0 for dot_timing
-        current_enemies = fallback;
-        current_enemy_count = 1;
-    }
+    game_bg = CP_Image_Load("Assets/background.jpg");
+    game_font = CP_Font_Load("Assets/Roboto-Regular.ttf");
+    if (game_font != 0) { CP_Font_Set(game_font); CP_Settings_TextSize(24); }
 
     deck_pos = CP_Vector_Set(50, 600);
     discard_pos = CP_Vector_Set(200, 600);
 
-    // --- UPDATED: New card definitions ---
-    Card strike = { deck_pos, CP_Vector_Set(0, 0), Attack, None, 10.0f,
-                    "Strike", "Deal %d damage",
-                    CARD_W_INIT, CARD_H_INIT, false };
-    Card heal = { deck_pos, CP_Vector_Set(0, 0), Heal, None, 15.0f,
-                  "Heal", "Heal %d health",
-                  CARD_W_INIT, CARD_H_INIT, false };
-    Card hemorrhage = { deck_pos, CP_Vector_Set(0, 0), Attack, DOT, 5.0f,
-                  "Hemorrhage", "Deal %d damage.\nApply 3 DOT",
-                  CARD_W_INIT, CARD_H_INIT, false };
-    Card quick_think = { deck_pos, CP_Vector_Set(0, 0), Heal, Draw, 5.0f,
-                  "Quick Think", "Heal %d.\nDraw 1 card",
-                  CARD_W_INIT, CARD_H_INIT, false };
-    // --- END UPDATED ---
+    InitDeck(&player_deck);
+    InitReward(&reward_state);
+    InitBuffReward(&buff_reward_state); // <-- NEW: Init buff reward system
 
-    // --- UPDATED: New starting deck ---
-    deck[0] = strike;
-    deck[1] = strike;
-    deck[2] = strike;
-    deck[3] = strike;
-    deck[4] = strike;
-    deck[5] = heal;
-    deck[6] = heal;
-    deck[7] = hemorrhage;
-    deck[8] = hemorrhage;
-    deck[9] = quick_think;
-    // --- END UPDATED ---
-
-    deck_size = 10;
-    hand_size = 0;
-    discard_size = 0;
-    selected_card_index = -1;
-    played_cards = 0;
-
-    turn_num = 0;
-    drawn = 0;
-
-    current_turn = PLAYER_TURN;
-
-    // --- Init animation globals ---
-    enemy_turn_timer = 0.0f;
-    enemy_action_index = 0;
-    enemy_anim_offset_x = 0.0f;
-    enemy_has_hit = false;
+    // Load Level 1
+    current_level = 1;
+    LoadLevel(current_level);
 }
 
-void Game_Init_At_Level_2_Shop(void)
-{
-    // 1. Run the normal init to reset stats, deck, etc.
-    Game_Init();
-    // 2. Now, override the state to put the player at the Level 2 shop
-    current_level = 2; // We just "cleared" level 2
-
-    // We must also set the game font here
-    CP_Font_Set(game_font);
-
-    // Set the state to the new Shop
-    CP_Engine_SetNextGameState(Shop_Init, Shop_Update, Shop_Exit);
+// --- NEW HELPER FUNCTION ---
+/**
+ * \brief Counts cards in hand that are NOT currently discarding.
+ */
+static int GetActiveHandSize(void) {
+    int count = 0;
+    for (int i = 0; i < hand_size; i++) {
+        if (!hand[i].is_discarding) {
+            count++;
+        }
+    }
+    return count;
 }
+// --- END NEW HELPER FUNCTION ---
 
+
+// ---------------------------------------------------------
+// 4. GAME UPDATE LOOP
+// ---------------------------------------------------------
 
 void Game_Update(void) {
-    CP_Graphics_ClearBackground(CP_Color_Create(20, 25, 28, 255));
-
+    float dt = CP_System_GetDt();
     float ww = (float)CP_System_GetWindowWidth();
     float wh = (float)CP_System_GetWindowHeight();
+    float mx = (float)CP_Input_GetMouseX();
+    float my = (float)CP_Input_GetMouseY();
+    int mouse_clicked = CP_Input_MouseClicked();
+    bool hand_needs_realignment = false;
 
-    // --- Global Input ---
-    if (CP_Input_KeyTriggered(KEY_Q)) {
-        CP_Engine_SetNextGameState(Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
+    // --- 1. Draw Background ---
+    CP_Graphics_ClearBackground(CP_Color_Create(20, 25, 28, 255));
+    if (game_bg) CP_Image_Draw(game_bg, ww * 0.5f, wh * 0.5f, ww, wh, 255);
+
+    // --- 2. Check for Reward/Stage Clear Screen ---
+    // --- MODIFIED: This now handles BOTH reward types ---
+    if (UpdateStageClear() == 1) {
+        return; // Skip rest of game logic if reward screen is active
     }
 
-    // Global Logic
-    UpdateStageClear();
+    // --- 3. Check for Game Over ---
+    if (player.health <= 0) {
+        ResetGame();
+        CP_Engine_SetNextGameState(GameOver_Init, GameOver_Update, GameOver_Exit);
+        return;
+    }
 
-    // --- Player (left side) ---
-    CP_Settings_RectMode(CP_POSITION_CORNER);
+    // --- 4. Update Flash Timers ---
+    if (player_hit_flash > 0.0f) player_hit_flash -= dt;
+    if (player_shield_flash > 0.0f) player_shield_flash -= dt;
+    if (current_enemies) { // Safety check
+        for (int i = 0; i < current_enemy_count; i++) {
+            if (enemy_hit_flash[i] > 0.0f) enemy_hit_flash[i] -= dt;
+            if (enemy_shield_flash[i] > 0.0f) enemy_shield_flash[i] -= dt;
+        }
+    }
+
+    // --- 5. Phase Logic ---
+    if (current_phase == PHASE_ENEMY) {
+        UpdateEnemyTurn();
+    }
+    else {
+        // --- Player Turn Logic ---
+        int living_enemies = 0;
+        int last_living_index = -1;
+        if (current_enemies) { // Safety check
+            for (int i = 0; i < current_enemy_count; i++) {
+                if (current_enemies[i].alive) {
+                    living_enemies++;
+                    last_living_index = i;
+                }
+            }
+        }
+
+        if (living_enemies == 1) {
+            selected_enemy = last_living_index;
+        }
+        else if (current_enemies && !current_enemies[selected_enemy].alive) { // Auto-select next
+            HandleEnemySelection();
+        }
+        else if (living_enemies > 1) { // Manual select
+            HandleEnemySelection();
+        }
+
+        // --- DEBUG: Handle Spacebar Attack ---
+        if (CP_Input_KeyTriggered(KEY_SPACE) && current_enemies && current_enemies[selected_enemy].alive)
+        {
+            current_enemies[selected_enemy].health -= 10;
+            if (current_enemies[selected_enemy].health <= 0) {
+                current_enemies[selected_enemy].alive = false;
+            }
+            enemy_hit_flash[selected_enemy] = 0.2f;
+            // --- FIX: Calculate enemy position for text ---
+            float enemy_width = 120.0f;
+            float spacing = 40.0f;
+            float total_width = (float)current_enemy_count * enemy_width + ((float)current_enemy_count - 1.0f) * spacing;
+            float start_x = ww - total_width - 200.0f;
+            float enemy_x = start_x + (float)selected_enemy * (enemy_width + spacing);
+            float enemy_y = wh / 2.0f - 160.0f / 2.0f; // 160.0f is enemy_height
+            SpawnFloatingText("-10", CP_Vector_Set(enemy_x + 60.0f, enemy_y), CP_Color_Create(255, 255, 0, 255));
+        }
+
+        if (CP_Input_KeyTriggered(KEY_Q)) {
+            CP_Engine_SetNextGameState(Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
+        }
+    }
+
+    // --- 6. Draw Player & Enemies ---
     DrawEntity("Player", player.health, player.max_health,
-        player.attack, player.defense,
+        player.attack, player.shield,
         100.0f, wh / 2.0f - 100.0f, 150.0f, 200.0f,
         CP_Color_Create(50, 50, 150, 255),
-        selected_enemy == -1); // glow player if no enemy selected
+        0, // Player is never "selected"
+        player_hit_flash, player_shield_flash);
 
-    // --- Draw Player MISS Text ---
-    if (player_miss_timer > 0.0f) {
-        CP_Font_Set(game_font);
-        CP_Settings_TextSize(24);
-        CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-        CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255)); // White text
-        // Draw over player model
-        CP_Font_DrawText("MISS!", 100.0f + 75.0f, wh / 2.0f - 100.0f + 100.0f);
-        player_miss_timer -= CP_System_GetDt();
-    }
-
-    // --- Enemies (right side) ---
-    CP_Settings_RectMode(CP_POSITION_CORNER);
-    if (current_enemies && current_enemy_count > 0) {
+    if (current_enemies && current_enemy_count > 0) { // Safety check
         float enemy_width = 120.0f;
         float enemy_height = 160.0f;
         float spacing = 40.0f;
-        float total_width = current_enemy_count * enemy_width + (current_enemy_count - 1) * spacing;
+        float total_width = (float)current_enemy_count * enemy_width + ((float)current_enemy_count - 1.0f) * spacing;
         float start_x = ww - total_width - 200.0f;
         float y = wh / 2.0f - enemy_height / 2.0f;
 
@@ -679,326 +745,453 @@ void Game_Update(void) {
             Enemy* e = &current_enemies[i];
             float x = start_x + i * (enemy_width + spacing);
 
-            // --- Apply animation offset ---
-            if (current_turn == ENEMY_TURN && i == enemy_action_index) {
+            if (current_phase == PHASE_ENEMY && i == enemy_action_index && e->alive) {
                 x += enemy_anim_offset_x;
             }
 
-            DrawEntity(e->name, e->health, e->max_health,
-                e->attack, e->defense,
-                x, y, enemy_width, enemy_height,
-                CP_Color_Create(120, 120, 120, 255),
-                selected_enemy == i); // glow if this enemy is selected
-        }
+            CP_Color col = e->alive ? CP_Color_Create(120, 120, 120, 255) : CP_Color_Create(80, 80, 80, 150);
 
-        // --- Draw Revive Indicators ---
-        for (int i = 0; i < current_enemy_count; i++) {
-            if (revive_text_timer[i] > 0.0f) {
-                float x = start_x + i * (enemy_width + spacing);
-                CP_Font_Set(game_font);
-                CP_Settings_TextSize(24);
-                CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-                CP_Settings_Fill(CP_Color_Create(0, 255, 0, 255)); // Bright Green text
-                CP_Font_DrawText("REVIVED!", x + enemy_width / 2.0f, y - 40.0f);
-                revive_text_timer[i] -= CP_System_GetDt();
-            }
-        }
-
-        // --- Draw Thief Steal Indicators ---
-        for (int i = 0; i < current_enemy_count; i++) {
-            if (thief_steal_timer[i] > 0.0f) {
-                float x = start_x + i * (enemy_width + spacing);
-                CP_Font_Set(game_font);
-                CP_Settings_TextSize(24);
-                CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-                CP_Settings_Fill(CP_Color_Create(255, 100, 100, 255)); // Red text
-                CP_Font_DrawText("CARD STOLEN!", x + enemy_width / 2.0f, y - 65.0f); // Draw slightly higher
-                thief_steal_timer[i] -= CP_System_GetDt();
-            }
-        }
-
-        // --- Draw Enemy MISS Text ---
-        for (int i = 0; i < current_enemy_count; i++) {
-            if (enemy_miss_timer[i] > 0.0f) {
-                float x = start_x + i * (enemy_width + spacing);
-                CP_Font_Set(game_font);
-                CP_Settings_TextSize(24);
-                CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-                CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255)); // White text
-                // Draw over enemy model
-                CP_Font_DrawText("MISS!", x + enemy_width / 2.0f, y + enemy_height / 2.0f);
-                enemy_miss_timer[i] -= CP_System_GetDt();
-            }
-        }
-
-        // --- NEW: Draw DOT Text ---
-        for (int i = 0; i < current_enemy_count; i++) {
-            if (dot_text_timer[i] > 0.0f) {
-                float x = start_x + i * (enemy_width + spacing);
-                CP_Font_Set(game_font);
-                CP_Settings_TextSize(24);
-                CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-                CP_Settings_Fill(CP_Color_Create(160, 32, 240, 255)); // Purple text
-                CP_Font_DrawText("DOT: 5 DMG!", x + enemy_width / 2.0f, y + enemy_height / 2.0f);
-                dot_text_timer[i] -= CP_System_GetDt();
-            }
+            DrawEntity(e->name, e->health, e->max_health, e->attack, e->shield,
+                x, y, enemy_width, enemy_height, col,
+                (selected_enemy == i), enemy_hit_flash[i], enemy_shield_flash[i]);
         }
     }
 
-    // --- Global HUD overlays ---
-    DrawHUD(ww, wh);
+    // --- 7. Draw HUD & Floating Text ---
+    char hud_text[128];
+    snprintf(hud_text, sizeof(hud_text), "Level %d | Turn %d", current_level, turn_num + 1);
+    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_LEFT, CP_TEXT_ALIGN_V_TOP);
+    CP_Settings_Fill(CP_Color_Create(255, 255, 0, 255));
+    CP_Font_Set(game_font);
+    CP_Settings_TextSize(30);
+    CP_Font_DrawText(hud_text, 20, 35);
 
-    // --- TURN-BASED LOGIC ---
-    switch (current_turn)
-    {
-    case PLAYER_TURN:
-    {
-        // --- PLAYER BUFF INDICATOR UI ---
-        float buff_text_y = 60.0f; // Start below the debug text
-        CP_Font_Set(game_font);
-        CP_Settings_TextSize(18);
-        CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_LEFT, CP_TEXT_ALIGN_V_TOP);
+    // --- NEW: Draw Active Buffs ---
+    float buff_text_y = 70.0f;
+    CP_Settings_TextSize(18);
+    CP_Settings_Fill(CP_Color_Create(0, 255, 255, 255)); // Cyan color for buffs
+    if (player.has_lifesteal) {
+        CP_Font_DrawText("Buff: Vampiric Strike (50% Lifesteal)", 20, buff_text_y);
+        buff_text_y += 25.0f;
+    }
+    if (player.has_desperate_draw) {
+        CP_Font_DrawText("Buff: Sudden Insight (Draw 3 on empty hand)", 20, buff_text_y);
+        buff_text_y += 25.0f;
+    }
+    if (player.has_divine_strike) {
+        CP_Font_DrawText("Buff: Divine Strike (Heal deals 50% AOE damage)", 20, buff_text_y);
+        buff_text_y += 25.0f;
+    }
+    // --- MODIFIED: Added Shield Boost buff display ---
+    if (player.has_shield_boost) {
+        CP_Font_DrawText("Buff: Reinforce (25% Bonus Shield)", 20, buff_text_y); // <-- Text updated
+        buff_text_y += 25.0f;
+    }
+    // --- MODIFIED: Added 35% buff displays ---
+    if (player.has_attack_boost_35) {
+        CP_Font_DrawText("Buff: Power Infusion (35% Bonus Attack)", 20, buff_text_y);
+        buff_text_y += 25.0f;
+    }
+    if (player.has_heal_boost_35) {
+        CP_Font_DrawText("Buff: Holy Infusion (35% Bonus Heal)", 20, buff_text_y);
+        buff_text_y += 25.0f;
+    }
+    if (player.has_shield_boost_35) {
+        CP_Font_DrawText("Buff: Barrier Infusion (35% Bonus Shield)", 20, buff_text_y);
+        buff_text_y += 25.0f;
+    }
+    // --- END NEW ---
 
-        if (g_player_has_lifesteal) {
-            CP_Settings_Fill(CP_Color_Create(255, 0, 0, 255));
-            CP_Font_DrawText("Vampire (Lifesteal)", 20.0f, buff_text_y);
-            buff_text_y += 20.0f; // Move down for next buff
-        }
-        if (g_card_multiplier > 1.0f) {
-            char multiplier_text[64];
-            snprintf(multiplier_text, 64, "Focused (Cards x%.1f)", g_card_multiplier);
-            CP_Settings_Fill(CP_Color_Create(255, 255, 0, 255));
-            CP_Font_DrawText(multiplier_text, 20.0f, buff_text_y);
-            buff_text_y += 20.0f;
-        }
-        if (g_player_draw_bonus) {
-            CP_Settings_Fill(CP_Color_Create(0, 150, 255, 255));
-            CP_Font_DrawText("Reserves (+1 Card Draw)", 20.0f, buff_text_y);
-        }
-        // --- END NEW UI ---
+    UpdateAndDrawFloatingText();
 
+    // --- 8. Card Logic: Purge Discarding Cards ---
+    for (int i = 0; i < hand_size; i++) {
+        if (hand[i].is_discarding && !hand[i].is_animating) {
 
-        // Player-only input
-        HandleInput();
+            discard[discard_size] = hand[i];
+            discard[discard_size].is_discarding = false; // Reset flag
+            discard_size++;
 
-        // --- Card system ---
-        CP_Settings_Stroke(CP_Color_Create(0, 0, 0, 255));
-        CP_Settings_Fill(CP_Color_Create(145, 145, 145, 255));
-        CP_Graphics_DrawRect(deck_pos.x, deck_pos.y, CARD_W_INIT, CARD_H_INIT);
-        CP_Graphics_DrawRect(discard_pos.x, discard_pos.y, CARD_W_INIT, CARD_H_INIT);
-
-        int cards_to_draw = 3;
-        if (g_player_draw_bonus) {
-            cards_to_draw = 4;
-        }
-
-        // Initial draw
-        if (turn_num == 0 && !drawn) {
-            for (int i = 0; i < cards_to_draw; ++i) { // Use new variable
-                if (deck_size > 0)
-                    DealFromDeck(deck, &hand[hand_size], &deck_size, &hand_size);
+            for (int j = i; j < hand_size - 1; j++) {
+                hand[j] = hand[j + 1];
             }
-            SetHandPos(hand, hand_size);
+
+            hand_size--;
+            hand_needs_realignment = true;
+            i--;
         }
-        else if (!drawn) {
-            // Regular draw
-            if (deck_size > 0) {
-                DealFromDeck(deck, &hand[hand_size], &deck_size, &hand_size);
+    }
+    if (hand_needs_realignment) {
+        SetHandPos(hand, hand_size);
+    }
+
+    // --- 9. Card Logic: Draw / Recycle ---
+    CP_Settings_RectMode(CP_POSITION_CORNER);
+    CP_Settings_Stroke(CP_Color_Create(0, 0, 0, 255));
+    CP_Settings_Fill(CP_Color_Create(145, 145, 145, 255));
+    CP_Graphics_DrawRect(deck_pos.x, deck_pos.y, CARD_W_INIT, CARD_H_INIT);
+    CP_Graphics_DrawRect(discard_pos.x, discard_pos.y, CARD_W_INIT, CARD_H_INIT);
+
+    CP_Font_Set(game_font);
+    CP_Settings_TextSize(24);
+    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
+    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
+    CP_Font_DrawText("Draw Pile", deck_pos.x + (CARD_W_INIT / 2.0f), deck_pos.y - 30.0f);
+    CP_Font_DrawText("Discard", discard_pos.x + (CARD_W_INIT / 2.0f), discard_pos.y - 30.0f);
+
+    char count_text[16];
+    snprintf(count_text, sizeof(count_text), "%d", draw_pile_size);
+    CP_Font_DrawText(count_text, deck_pos.x + (CARD_W_INIT / 2.0f), deck_pos.y + (CARD_H_INIT / 2.0f));
+    snprintf(count_text, sizeof(count_text), "%d", discard_size);
+    CP_Font_DrawText(count_text, discard_pos.x + (CARD_W_INIT / 2.0f), discard_pos.y + (CARD_H_INIT / 2.0f));
+
+
+    if (!drawn) {
+        if (turn_num == 0) {
+            for (int i = 0; i < 3; ++i) {
+                if (draw_pile_size > 0 && hand_size < MAX_HAND_SIZE) {
+                    DealFromDeck(draw_pile, &hand[hand_size], &draw_pile_size, &hand_size);
+                }
             }
-            // Check if we need to draw the bonus card
-            if (g_player_draw_bonus && deck_size > 0) {
-                if (deck_size > 0) // Check again in case deck ran out
-                    DealFromDeck(deck, &hand[hand_size], &deck_size, &hand_size);
-            }
-            SetHandPos(hand, hand_size);
         }
+        else {
+            // --- FIX: Use GetActiveHandSize() to check hand ---
+            int active_hand_size = GetActiveHandSize();
+            int cards_to_draw = 1; // Default draw 1
+            if (active_hand_size == 0 && player.has_desperate_draw) {
+                cards_to_draw = 3; // Buff active
+            }
+            else if (active_hand_size == 0) {
+                cards_to_draw = 2; // Normal empty hand
+            }
+            // --- END FIX ---
+
+            for (int i = 0; i < cards_to_draw; ++i) {
+                if (draw_pile_size > 0 && hand_size < MAX_HAND_SIZE) {
+                    DealFromDeck(draw_pile, &hand[hand_size], &draw_pile_size, &hand_size);
+                }
+            }
+        }
+        SetHandPos(hand, hand_size);
         drawn = true;
-
-        // Mulligan system
-        if (deck_size == 0 && hand_size == 0 && played_cards == 0) { // Only recycle if hand is empty
-            RecycleDeck(discard, deck, &discard_size, &deck_size);
-        }
-
-        // Animate card movement
-        if (hand_size > 0) {
-            if (animate_index >= hand_size) animate_index = 0; // Fix potential crash
-            if (hand[animate_index].is_animating) {
-                AnimateMoveCard(&hand[animate_index]);
-            }
-            else {
-                animate_index++;
-                if (animate_index >= hand_size) animate_index = 0;
-            }
-        }
-
-        // Draw all cards in hand
-        for (int i = 0; i < hand_size; ++i) {
-            if (i == selected_card_index) {
-                CP_Settings_Stroke(CP_Color_Create(255, 255, 0, 255));
-            }
-            else {
-                CP_Settings_Stroke(CP_Color_Create(0, 0, 0, 255));
-            }
-            // --- UPDATED: Pass icons to DrawCard ---
-            DrawCard(&hand[i], card_type_icons, card_effect_icons);
-        }
-
-        // Select button
-        float select_btn_x = ww - 150.0f;
-        float select_btn_y = wh - 100.0f;
-        if (selected_card_index >= 0 || played_cards > 0) {
-            CP_Settings_RectMode(CP_POSITION_CENTER);
-            CP_Settings_Fill(CP_Color_Create(100, 100, 100, 255));
-            CP_Graphics_DrawRect(select_btn_x, select_btn_y, SELECT_BTN_W, SELECT_BTN_H);
-
-            // --- Draw Button Text ---
-            CP_Font_Set(game_font);
-            CP_Settings_TextSize(24);
-            CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-            CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
-
-            if (selected_card_index >= 0) {
-                CP_Font_DrawText("Use Card", select_btn_x, select_btn_y + 2.0f);
-            }
-            else {
-                CP_Font_DrawText("End Turn", select_btn_x, select_btn_y + 2.0f);
-            }
-        }
-
-        // Player card selection
-        for (int i = 0; i < hand_size; ++i) {
-            if (CP_Input_MouseClicked() &&
-                IsAreaClicked(hand[i].pos.x, hand[i].pos.y, hand[i].card_w, hand[i].card_h,
-                    CP_Input_GetMouseX(), CP_Input_GetMouseY()) == 1) {
-                SelectCard(i, &selected_card_index);
-            }
-        }
-
-        // Use card
-        if (CP_Input_MouseClicked() &&
-            IsAreaClicked(select_btn_x, select_btn_y, SELECT_BTN_W, SELECT_BTN_H,
-                CP_Input_GetMouseX(), CP_Input_GetMouseY()) == 1 &&
-            selected_card_index >= 0) {
-
-            Enemy* targeted_enemy = &current_enemies[selected_enemy];
-            bool did_miss = false;
-
-            // Check for miss *before* using the card
-            if (hand[selected_card_index].type == Attack) {
-                if (DidAttackMiss()) {
-                    enemy_miss_timer[selected_enemy] = 1.5f; // Show "MISS!"
-                    did_miss = true;
-                }
-            }
-
-            // --- UPDATED: Pass deck and deck_size to UseCard ---
-            UseCard(hand, &selected_card_index, &hand_size, &player, targeted_enemy, deck, &deck_size, did_miss);
-
-            if (!did_miss) {
-                if (targeted_enemy->health <= 0) {
-                    targeted_enemy->health = 0;
-                    targeted_enemy->alive = false;
-                }
-
-                if (targeted_enemy->alive) {
-                    hit_flash_timer[selected_enemy] = 0.2f;
-                }
-            }
-
-            // This logic runs whether it was a hit or miss
-            ++played_cards;
-
-            // selected_index is reset inside UseCard if it was a Draw card
-            // so we must check again
-            if (selected_card_index != -1 && hand_size > 0) {
-                hand[selected_card_index].target_pos = discard_pos;
-            }
-        }
-        else if (CP_Input_MouseClicked() &&
-            IsAreaClicked(select_btn_x, select_btn_y, SELECT_BTN_W, SELECT_BTN_H,
-                CP_Input_GetMouseX(), CP_Input_GetMouseY()) == 1 &&
-            played_cards > 0) {
-            played_cards = 3;
-            SetHandPos(hand, hand_size);
-            animate_index = 0;
-        }
-
-        // Move selected card to discard
-        if (selected_card_index >= 0 && hand_size > 0 &&
-            hand[selected_card_index].pos.x == discard_pos.x &&
-            hand[selected_card_index].pos.y == discard_pos.y) {
-            DiscardCard(hand, &selected_card_index, &hand_size, discard, &discard_size);
-        }
-
-        // End turn
-        if (played_cards == 3) {
-            current_turn = ENEMY_TURN;
-            // Reset animation vars
-            enemy_action_index = 0;
-            enemy_turn_timer = 0.0f;
-            enemy_anim_offset_x = 0.0f;
-            enemy_has_hit = false;
-        }
-        break; // End PLAYER_TURN
     }
 
-    case ENEMY_TURN:
-    {
-        UpdateEnemyTurn();
-        break; // End ENEMY_TURN
+    if (draw_pile_size == 0) RecycleDeck(discard, draw_pile, &discard_size, &draw_pile_size);
+
+    // --- 10. Draw Hand & Button ---
+    for (int i = 0; i < hand_size; ++i) {
+        if (hand[i].is_animating) AnimateMoveCard(&hand[i]);
+        if (i == selected_card_index) {
+            CP_Settings_Stroke(CP_Color_Create(255, 255, 0, 255));
+            CP_Settings_StrokeWeight(3.0f);
+        }
+        else {
+            CP_Settings_Stroke(CP_Color_Create(0, 0, 0, 255));
+            CP_Settings_StrokeWeight(1.0f);
+        }
+        DrawCard(&hand[i]);
     }
 
-    case GAME_OVER:
-    {
-        // --- 1. Draw the UI ---
-        CP_Settings_Fill(CP_Color_Create(0, 0, 0, 200));
-        CP_Settings_RectMode(CP_POSITION_CORNER);
-        CP_Graphics_DrawRect(0, 0, ww, wh);
+    float select_btn_x = ww - 150.0f;
+    float select_btn_y = wh - 100.0f;
+    // --- MODIFIED: Show button if any cards played (for End Turn) OR card selected (for Use Card) ---
+    if (selected_card_index >= 0 || played_cards > 0 || hand_size > 0) {
+        CP_Settings_RectMode(CP_POSITION_CENTER);
+        CP_Settings_Fill(CP_Color_Create(100, 100, 100, 255));
+        CP_Graphics_DrawRect(select_btn_x, select_btn_y, SELECT_BTN_W, SELECT_BTN_H);
 
         CP_Font_Set(game_font);
-        CP_Settings_TextSize(48);
+        CP_Settings_TextSize(32);
         CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-        CP_Settings_Fill(CP_Color_Create(255, 0, 0, 255)); // Red text
-        CP_Font_DrawText("YOU HAVE DIED", ww / 2.0f, wh / 2.0f - 150.0f);
+        CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
 
-        // Set the death flag
-        g_player_has_died = true;
+        if (selected_card_index >= 0) {
+            CP_Font_DrawText("Use Card", select_btn_x, select_btn_y);
+        }
+        else {
+            CP_Font_DrawText("End Turn", select_btn_x, select_btn_y);
+        }
+    }
 
-        // Define button positions
-        float buttonA_x = ww / 2.0f;
-        float buttonA_y = wh / 2.0f;
-        float buttonB_x = ww / 2.0f;
-        float buttonB_y = wh / 2.0f + 120.0f;
+    // --- 11. Click Logic ---
+    if (current_phase == PHASE_PLAYER && mouse_clicked) {
 
-        float mouse_x = (float)CP_Input_GetMouseX();
-        float mouse_y = (float)CP_Input_GetMouseY();
-        int mouse_clicked = CP_Input_MouseClicked();
-
-        int hoverA = IsAreaClicked(buttonA_x, buttonA_y, CHOICE_BTN_W, CHOICE_BTN_H, mouse_x, mouse_y);
-        int hoverB = IsAreaClicked(buttonB_x, buttonB_y, CHOICE_BTN_W, CHOICE_BTN_H, mouse_x, mouse_y);
-
-        DrawChoiceButton("Restart", buttonA_x, buttonA_y, CHOICE_BTN_W, CHOICE_BTN_H, hoverA);
-        DrawChoiceButton("Main Menu", buttonB_x, buttonB_y, CHOICE_BTN_W, CHOICE_BTN_H, hoverB);
-
-        // --- 2. Check for Click ---
-        if (mouse_clicked) {
-            if (hoverA) {
-                // "Restart" was clicked.
-                CP_Engine_SetNextGameState(Game_Init, Game_Update, Game_Exit);
-            }
-            else if (hoverB) {
-                // "Main Menu" was clicked
-                CP_Engine_SetNextGameState(Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
+        // Check Card Selection
+        for (int i = 0; i < hand_size; ++i) {
+            if (hand[i].is_discarding) continue;
+            if (IsAreaClicked(hand[i].pos.x, hand[i].pos.y, hand[i].card_w, hand[i].card_h, mx, my)) {
+                SelectCard(i, &selected_card_index, hand);
+                break;
             }
         }
-        break; // End GAME_OVER
-    }
+
+        // Button Click
+        if (IsAreaClicked(select_btn_x, select_btn_y, SELECT_BTN_W, SELECT_BTN_H, mx, my)) {
+
+            // --- CASE 1: PLAY CARD ---
+            if (selected_card_index >= 0) {
+
+                if (hand[selected_card_index].is_discarding) {
+                    selected_card_index = -1;
+                }
+                else
+                {
+                    Card* card = &hand[selected_card_index];
+                    Enemy* target_enemy = (current_enemies && selected_enemy >= 0 && selected_enemy < current_enemy_count) ? &current_enemies[selected_enemy] : NULL;
+                    bool has_valid_target = (target_enemy && target_enemy->alive);
+
+                    // --- MODIFIED: Shield Bash is now AOE, doesn't need a single target ---
+                    bool can_play_shield_bash = (card->type == Shield && card->effect == SHIELD_BASH);
+
+                    // --- MODIFIED: Added check for Cleave (which doesn't need a single target) ---
+                    bool can_play_cleave = (card->type == Attack && card->effect == CLEAVE);
+
+                    if (card->type == Heal || (card->type == Shield && card->effect == None) || (card->type == Attack && has_valid_target && card->effect != CLEAVE) || can_play_shield_bash || can_play_cleave)
+                    {
+                        int power = UseCard(hand, &selected_card_index, &hand_size, &player, target_enemy);
+
+                        if (card->type == Attack) {
+
+                            int damage_to_deal = power + player.attack_bonus;
+                            // --- MODIFIED: Apply 35% buff if active ---
+                            if (player.has_attack_boost_35) {
+                                damage_to_deal = (int)(damage_to_deal * 1.35f);
+                            }
+
+                            if (card->effect == CLEAVE) {
+                                if (damage_to_deal <= 0) damage_to_deal = 1;
+
+                                // Loop through ALL enemies
+                                for (int i = 0; i < current_enemy_count; i++) {
+                                    if (current_enemies[i].alive) {
+                                        Enemy* cleave_target = &current_enemies[i];
+                                        int damage_blocked = 0;
+                                        int damage_dealt = 0;
+
+                                        if (cleave_target->shield > 0) {
+                                            damage_blocked = (damage_to_deal <= cleave_target->shield) ? damage_to_deal : cleave_target->shield;
+                                            cleave_target->shield -= damage_blocked;
+                                            enemy_shield_flash[i] = 0.2f;
+                                        }
+                                        damage_dealt = damage_to_deal - damage_blocked;
+
+                                        if (damage_dealt > 0) {
+                                            cleave_target->health -= damage_dealt;
+                                            enemy_hit_flash[i] = 0.2f;
+
+                                            float enemy_width = 120.0f;
+                                            float spacing = 40.0f;
+                                            float total_width = (float)current_enemy_count * enemy_width + ((float)current_enemy_count - 1.0f) * spacing;
+                                            float start_x = ww - total_width - 200.0f;
+                                            float enemy_x = start_x + (float)i * (enemy_width + spacing);
+                                            float enemy_y = wh / 2.0f - 160.0f / 2.0f;
+
+                                            char dmg_text[16];
+                                            snprintf(dmg_text, sizeof(dmg_text), "-%d", damage_dealt);
+                                            SpawnFloatingText(dmg_text, CP_Vector_Set(enemy_x + 60.0f, enemy_y - 30.0f), CP_Color_Create(255, 80, 80, 255));
+                                        }
+                                        if (cleave_target->health <= 0) cleave_target->alive = false;
+                                    }
+                                }
+                            }
+                            else {
+                                // --- This is the Single-Target Attack logic ---
+                                int damage_blocked = 0;
+                                int damage_dealt = 0;
+
+                                if (target_enemy->shield > 0) {
+                                    damage_blocked = (damage_to_deal <= target_enemy->shield) ? damage_to_deal : target_enemy->shield;
+                                    target_enemy->shield -= damage_blocked;
+                                    enemy_shield_flash[selected_enemy] = 0.2f;
+                                }
+                                damage_dealt = damage_to_deal - damage_blocked;
+                                if (damage_dealt > 0) {
+                                    target_enemy->health -= damage_dealt;
+                                    enemy_hit_flash[selected_enemy] = 0.2f;
+
+                                    if (player.has_lifesteal) {
+                                        int lifesteal_amount = (int)(damage_dealt * 0.50f);
+                                        if (lifesteal_amount < 1 && damage_dealt > 0) lifesteal_amount = 1;
+
+                                        if (lifesteal_amount > 0) {
+                                            player.health += lifesteal_amount;
+                                            if (player.health > player.max_health) player.health = player.max_health;
+
+                                            char heal_text[16];
+                                            snprintf(heal_text, sizeof(heal_text), "+%d", lifesteal_amount);
+                                            SpawnFloatingText(heal_text, CP_Vector_Set(175.0f, wh / 2.0f - 30.0f), CP_Color_Create(80, 255, 80, 255));
+                                        }
+                                    }
+
+                                    float enemy_width = 120.0f;
+                                    float spacing = 40.0f;
+                                    float total_width = (float)current_enemy_count * enemy_width + ((float)current_enemy_count - 1.0f) * spacing;
+                                    float start_x = ww - total_width - 200.0f;
+                                    float enemy_x = start_x + (float)selected_enemy * (enemy_width + spacing);
+                                    float enemy_y = wh / 2.0f - 160.0f / 2.0f;
+
+                                    char text[16];
+                                    snprintf(text, sizeof(text), "-%d", damage_dealt);
+                                    SpawnFloatingText(text, CP_Vector_Set(enemy_x + 60.0f, enemy_y), CP_Color_Create(255, 80, 80, 255));
+                                }
+                                else {
+                                    float enemy_width = 120.0f;
+                                    float spacing = 40.0f;
+                                    float total_width = (float)current_enemy_count * enemy_width + ((float)current_enemy_count - 1.0f) * spacing;
+                                    float start_x = ww - total_width - 200.0f;
+                                    float enemy_x = start_x + (float)selected_enemy * (enemy_width + spacing);
+                                    float enemy_y = wh / 2.0f - 160.0f / 2.0f;
+
+                                    SpawnFloatingText("Block!", CP_Vector_Set(enemy_x + 60.0f, enemy_y), CP_Color_Create(150, 150, 255, 255));
+                                }
+
+                                if (target_enemy->health <= 0) target_enemy->alive = false;
+                            }
+                        }
+                        else if (card->type == Heal) {
+
+                            int heal_amount = power + player.heal_bonus;
+                            // --- MODIFIED: Apply 35% buff if active ---
+                            if (player.has_heal_boost_35) {
+                                heal_amount = (int)(heal_amount * 1.35f);
+                            }
+
+                            player.health += heal_amount;
+                            if (player.health > player.max_health) player.health = player.max_health;
+
+                            char text[16];
+                            snprintf(text, sizeof(text), "+%d", heal_amount);
+                            SpawnFloatingText(text, CP_Vector_Set(175.0f, wh / 2.0f), CP_Color_Create(80, 255, 80, 255));
+
+                            // --- MODIFIED: Trigger from buff OR card effect ---
+                            if (player.has_divine_strike || card->effect == DIVINE_STRIKE_EFFECT) {
+                                int divine_damage = heal_amount / 2; // 50% of heal amount
+                                if (divine_damage < 1 && heal_amount > 0) divine_damage = 1;
+
+                                if (divine_damage > 0 && current_enemies) {
+                                    // Loop through ALL enemies
+                                    for (int i = 0; i < current_enemy_count; i++) {
+                                        if (current_enemies[i].alive) {
+                                            Enemy* divine_target = &current_enemies[i];
+                                            int damage_blocked = 0;
+                                            int damage_dealt = 0;
+
+                                            if (divine_target->shield > 0) {
+                                                damage_blocked = (divine_damage <= divine_target->shield) ? divine_damage : divine_target->shield;
+                                                divine_target->shield -= damage_blocked;
+                                                enemy_shield_flash[i] = 0.2f;
+                                            }
+                                            damage_dealt = divine_damage - damage_blocked;
+
+                                            if (damage_dealt > 0) {
+                                                divine_target->health -= damage_dealt;
+                                                enemy_hit_flash[i] = 0.2f;
+
+                                                float enemy_width = 120.0f;
+                                                float spacing = 40.0f;
+                                                float total_width = (float)current_enemy_count * enemy_width + ((float)current_enemy_count - 1.0f) * spacing;
+                                                float start_x = ww - total_width - 200.0f;
+                                                float enemy_x = start_x + (float)i * (enemy_width + spacing);
+                                                float enemy_y = wh / 2.0f - 160.0f / 2.0f;
+
+                                                char dmg_text[16];
+                                                snprintf(dmg_text, sizeof(dmg_text), "-%d", damage_dealt);
+                                                SpawnFloatingText(dmg_text, CP_Vector_Set(enemy_x + 60.0f, enemy_y - 30.0f), CP_Color_Create(255, 255, 100, 255)); // Yellow text
+                                            }
+                                            if (divine_target->health <= 0) divine_target->alive = false;
+                                        }
+                                    }
+                                }
+                            }
+                            // --- END: Divine Strike Logic ---
+                        }
+                        else if (card->type == Shield) {
+
+                            int shield_amount = power + player.shield_bonus;
+
+                            // --- MODIFIED: Apply 25% boost if active ---
+                            if (player.has_shield_boost) {
+                                shield_amount = (int)(shield_amount * 1.25f);
+                            }
+                            // --- MODIFIED: Apply 35% boost if active ---
+                            if (player.has_shield_boost_35) {
+                                shield_amount = (int)(shield_amount * 1.35f);
+                            }
+
+                            player.shield += shield_amount;
+                            player_shield_flash = 0.2f;
+
+                            char text[16];
+                            snprintf(text, sizeof(text), "+%d", shield_amount);
+                            SpawnFloatingText(text, CP_Vector_Set(175.0f, wh / 2.0f), CP_Color_Create(80, 80, 255, 255));
+
+                            // --- MODIFIED: Logic for AOE Shield Bash ---
+                            if (card->effect == SHIELD_BASH) {
+                                // Damage equals *new* total shield
+                                int damage_to_deal = player.shield;
+                                if (damage_to_deal <= 0) damage_to_deal = 1;
+
+                                // Loop through ALL enemies
+                                for (int i = 0; i < current_enemy_count; i++) {
+                                    if (current_enemies[i].alive) {
+                                        Enemy* bash_target = &current_enemies[i];
+                                        int damage_blocked = 0;
+                                        int damage_dealt = 0;
+
+                                        if (bash_target->shield > 0) {
+                                            damage_blocked = (damage_to_deal <= bash_target->shield) ? damage_to_deal : bash_target->shield;
+                                            bash_target->shield -= damage_blocked;
+                                            enemy_shield_flash[i] = 0.2f;
+                                        }
+                                        damage_dealt = damage_to_deal - damage_blocked;
+
+                                        if (damage_dealt > 0) {
+                                            bash_target->health -= damage_dealt;
+                                            enemy_hit_flash[i] = 0.2f;
+
+                                            float enemy_width = 120.0f;
+                                            float spacing = 40.0f;
+                                            float total_width = (float)current_enemy_count * enemy_width + ((float)current_enemy_count - 1.0f) * spacing;
+                                            float start_x = ww - total_width - 200.0f;
+                                            float enemy_x = start_x + (float)i * (enemy_width + spacing);
+                                            float enemy_y = wh / 2.0f - 160.0f / 2.0f;
+
+                                            char dmg_text[16];
+                                            snprintf(dmg_text, sizeof(dmg_text), "-%d", damage_dealt);
+                                            SpawnFloatingText(dmg_text, CP_Vector_Set(enemy_x + 60.0f, enemy_y - 30.0f), CP_Color_Create(255, 80, 80, 255));
+                                        }
+                                        if (bash_target->health <= 0) bash_target->alive = false;
+                                    }
+                                }
+                            }
+                            // --- END SHIELD BASH MODIFICATION ---
+                        }
+
+                        ++played_cards;
+                        card->is_discarding = true;
+                        card->is_animating = true;
+                        card->target_pos = CP_Vector_Set(discard_pos.x + CARD_W_INIT / 2.0f, discard_pos.y + CARD_H_INIT / 2.0f);
+                        selected_card_index = -1;
+                    }
+                }
+            }
+            // --- CASE 2: END TURN ---
+            // --- MODIFIED: This is now the "End Turn" button logic ---
+            else {
+                current_phase = PHASE_ENEMY;
+                enemy_action_index = 0;
+                enemy_turn_timer = 0.0f;
+                enemy_anim_offset_x = 0.0f;
+                selected_card_index = -1;
+            }
+        }
     }
 
+    // --- 12. Check for End of Player Turn ---
+    // --- MODIFIED: This entire block has been removed, as the "End Turn" button handles it ---
 }
 
 void Game_Exit(void)
 {
-    // This function is called when changing states.
-    // We MUST NOT free the font here.
+    CP_Image_Free(game_bg);
 }
