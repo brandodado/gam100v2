@@ -54,8 +54,8 @@ void DrawReward(RewardState* reward_state, Player* player);
 bool IsRewardOptionClicked(RewardState* reward_state, int index, float mouse_x, float mouse_y);
 
 // Apply selected reward to the deck
-// --- MODIFIED: Added Player* ---
-bool ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player);
+// --- MODIFIED: Changed to void return type ---
+void ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player);
 
 // Reset reward state
 void ResetReward(RewardState* reward_state);

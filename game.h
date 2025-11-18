@@ -15,11 +15,12 @@ typedef struct Player {
     bool has_divine_strike;
     bool has_shield_boost; // 25% shield buff
 
-    // --- MODIFIED: Added new Lvl 6 Buffs ---
     bool has_attack_boost_35;
     bool has_heal_boost_35;
     bool has_shield_boost_35;
 
+    int checkpoint_level;
+    int death_count; // <-- MODIFIED: Added death counter
 
     // --- Card Bonus Trackers ---
     int attack_bonus;
@@ -45,6 +46,11 @@ void LoadLevel(int level);   // Declaration
 void ResetGame(void);        // If you call ResetGame from menu
 
 void ResetStageState(void);
+
+// --- MODIFIED: New/Updated functions ---
+void Game_Set_Restart_Flag(bool value);
+void Game_Increment_Death_Count(void);
+int Game_Get_Death_Count(void);
 
 void Game_Init(void);
 void Game_Update(void);

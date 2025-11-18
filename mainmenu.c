@@ -3,6 +3,7 @@
 #include "cprocessing.h"
 #include "utils.h"
 #include "tutorial.h"
+#include "victory.h" // <-- ADDED
 
 #define BUTTON_WIDTH 300.0f
 #define BUTTON_HEIGHT 80.0f
@@ -17,6 +18,9 @@ static CP_Font menu_font;
 
 void Main_Menu_Init(void)
 {
+    // --- MODIFIED: Reset the checkpoint flag ---
+    Game_Set_Restart_Flag(false);
+
     menu_font = CP_Font_Load("Assets/Exo2-Regular.ttf");
     CP_Font_Set(menu_font);
     CP_Settings_TextSize(32);

@@ -1,23 +1,12 @@
-//---------------------------------------------------------
-// file:	main.c
-// author:	[MUHAMMAD AFIF JAZIMIN BIN JOHARI]
-// email:	[m.binjohari]
-//
-// brief:	Main entry point for the sample project
-//			of the CProcessing library
-//
-// Copyright © 2020 DigiPen, All rights reserved.
-//---------------------------------------------------------
-
 #include "cprocessing.h"
 #include "mainmenu.h"
 #include <time.h>
-#include <stdlib.h>
+// #include <stdlib.h> // No longer needed
 
 int main(void)
 {
     // Seed the random number generator
-    srand((unsigned int)time(NULL));
+    CP_Random_Seed((unsigned int)time(NULL));
 
     // Set a safe window size first
     CP_System_SetWindowSize(1280, 720);

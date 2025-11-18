@@ -37,9 +37,8 @@ void GenerateRewardOptions(RewardState* reward_state, Player* player) {
     float card_w = CARD_W_INIT * 1.5f;
     float card_h = CARD_H_INIT * 1.5f;
 
-    // --- NEW: Calculate scaling buff amount ---
     // --- MODIFIED: Reduced scaling formula ---
-    int buff_increase = 3 + (player->card_reward_count * 2);
+    int buff_increase = 2 + player->card_reward_count;
 
     // --- NEW: Calculate the NEXT bonus level ---
     int next_attack_bonus = player->attack_bonus + buff_increase;
@@ -48,23 +47,36 @@ void GenerateRewardOptions(RewardState* reward_state, Player* player) {
 
     // --- NEW: Create dynamic descriptions ---
     char attack_desc[200];
-    // --- MODIFIED: Updated description text ---
-    snprintf(attack_desc, sizeof(attack_desc), "Cleave: Deals %d damage to ALL enemies.\n\nall Attack cards do an additional +%d damage.", 7 + next_attack_bonus, next_attack_bonus);
-
     char heal_desc[200];
-    // --- MODIFIED: Updated description text ---
-    snprintf(heal_desc, sizeof(heal_desc), "Heals %d HP. Deals 50%% of heal as AOE damage.\n\nall Heal cards do an additional +%d HP.", 7 + next_heal_bonus, next_heal_bonus);
-
     char shield_desc[200];
 
-    // --- MODIFIED: Shield Bash is now always offered ---
-    CardEffect shield_effect = SHIELD_BASH;
-    snprintf(shield_desc, sizeof(shield_desc), "Shield Bash:\nGain %d Shield, then deal damage equal to your new total Shield.\n\nall Shield cards do an additional +%d Shield.", 5 + next_shield_bonus, next_shield_bonus);
+    // --- MODIFIED: Dynamic description based on if player already has a bonus ---
+    if (player->attack_bonus == 0) {
+        snprintf(attack_desc, sizeof(attack_desc), "Add 2 Cleave cards.\n\nall Attack cards do an additional +%d damage.", next_attack_bonus);
+    }
+    else {
+        snprintf(attack_desc, sizeof(attack_desc), "all Attack cards do an additional +%d damage.", next_attack_bonus);
+    }
+
+    if (player->heal_bonus == 0) {
+        snprintf(heal_desc, sizeof(heal_desc), "Add 2 Divine Strike cards.\n\nall Heal cards do an additional +%d HP.", next_heal_bonus);
+    }
+    else {
+        snprintf(heal_desc, sizeof(heal_desc), "all Heal cards do an additional +%d HP.", next_heal_bonus);
+    }
+
+    if (player->shield_bonus == 0) {
+        snprintf(shield_desc, sizeof(shield_desc), "Add 2 Shield Bash cards.\n\nall Shield cards do an additional +%d Shield.", next_shield_bonus);
+    }
+    else {
+        snprintf(shield_desc, sizeof(shield_desc), "all Shield cards do an additional +%d Shield.", next_shield_bonus);
+    }
+    // --- END MODIFICATION ---
 
 
     // Create attack card reward
     Card attack_reward = {
-        card_pos, card_pos, Attack, CLEAVE, 7, "", // <-- MODIFIED: Set effect to CLEAVE
+        card_pos, card_pos, Attack, CLEAVE, 7, "",
         card_w, card_h, false, false
     };
     strncpy(attack_reward.description, attack_desc, sizeof(attack_reward.description) - 1);
@@ -72,14 +84,14 @@ void GenerateRewardOptions(RewardState* reward_state, Player* player) {
 
     // Create heal card reward
     Card heal_reward = {
-        card_pos, card_pos, Heal, DIVINE_STRIKE_EFFECT, 7, "", // <-- MODIFIED: Set effect to DIVINE_STRIKE_EFFECT
+        card_pos, card_pos, Heal, DIVINE_STRIKE_EFFECT, 7, "",
         card_w, card_h, false, false
     };
     strncpy(heal_reward.description, heal_desc, sizeof(heal_reward.description) - 1);
 
     // Create shield card reward
     Card shield_reward = {
-        card_pos, card_pos, Shield, shield_effect, 5, "",
+        card_pos, card_pos, Shield, SHIELD_BASH, 5, "",
         card_w, card_h, false, false
     };
     strncpy(shield_reward.description, shield_desc, sizeof(shield_reward.description) - 1);
@@ -149,12 +161,10 @@ void UpdateReward(RewardState* reward_state, Deck* deck, Player* player) {
             if (IsRewardOptionClicked(reward_state, i, mouse_x, mouse_y)) {
                 reward_state->selected_index = i;
 
-                // Apply reward immediately and lock selection
-                // --- MODIFIED: Pass 'player' ---
-                if (ApplyRewardSelection(reward_state, deck, player)) {
-                    reward_state->reward_claimed = true;
-                    reward_state->is_active = false;
-                }
+                // --- MODIFIED: Removed 'if' check ---
+                ApplyRewardSelection(reward_state, deck, player);
+                reward_state->reward_claimed = true;
+                reward_state->is_active = false;
                 break;
             }
         }
@@ -250,7 +260,6 @@ void DrawReward(RewardState* reward_state, Player* player) {
         CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
 
         char current_bonus_text[100];
-        // --- MODIFIED: Simplified shield text ---
         if (reward_state->options[i].type == REWARD_ATTACK_CARD) {
             snprintf(current_bonus_text, sizeof(current_bonus_text), "Current Bonus: +%d", player->attack_bonus);
         }
@@ -302,88 +311,75 @@ void DrawReward(RewardState* reward_state, Player* player) {
     }
 }
 
-// --- MODIFIED: Added Player* to apply buff and update card descriptions ---
-bool ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player) {
+// --- MODIFIED: Changed to void return type ---
+void ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player) {
     if (!reward_state || !deck || !player || reward_state->selected_index < 0 ||
         reward_state->selected_index >= reward_state->num_options) {
-        return false;
+        return;
     }
 
-    // --- FIX: Get buff amount based on the count *before* this reward ---
     // --- MODIFIED: Reduced scaling formula ---
-    int buff_increase = 3 + (player->card_reward_count * 2);
+    int buff_increase = 2 + player->card_reward_count;
     RewardType selected_type = reward_state->options[reward_state->selected_index].type;
     Card selected_card_template = reward_state->options[reward_state->selected_index].card;
 
-    // --- FIX: Increment count *after* applying reward ---
     player->card_reward_count++;
 
-    // --- MODIFIED: Create separate description buffers ---
-    char new_card_description[200]; // For the card being added
-    char existing_normal_description[200]; // For basic cards already in the deck
-    char existing_special_description[200]; // For special cards already in the deck
+    char new_card_description[200];
+    char existing_normal_description[200];
+    char existing_special_description[200];
 
     int new_bonus = 0;
+    bool add_cards = false; // --- MODIFIED: Flag to control adding cards ---
 
     if (selected_type == REWARD_ATTACK_CARD) {
+        if (player->attack_bonus == 0) add_cards = true; // --- MODIFIED
         player->attack_bonus += buff_increase;
         new_bonus = player->attack_bonus;
 
-        // Description for the *new* Cleave card being added
         snprintf(new_card_description, sizeof(new_card_description), "Cleave: Deals %d damage to ALL enemies.", 7 + new_bonus);
-        // Description for *existing* normal Attack cards
         snprintf(existing_normal_description, sizeof(existing_normal_description), "Deals %d damage.", 7 + new_bonus);
 
-        // Update all cards of this type in the master deck
         for (int i = 0; i < deck->size; i++) {
             if (deck->cards[i].type == Attack) {
-                // --- MODIFIED: Update descriptions based on effect ---
                 if (deck->cards[i].effect == None) {
                     strncpy(deck->cards[i].description, existing_normal_description, sizeof(deck->cards[i].description) - 1);
                 }
                 else if (deck->cards[i].effect == CLEAVE) {
-                    // Also update existing Cleave cards
                     strncpy(deck->cards[i].description, new_card_description, sizeof(deck->cards[i].description) - 1);
                 }
             }
         }
     }
     else if (selected_type == REWARD_HEAL_CARD) {
+        if (player->heal_bonus == 0) add_cards = true; // --- MODIFIED
         player->heal_bonus += buff_increase;
         new_bonus = player->heal_bonus;
 
-        // Description for the *new* Divine Strike card
-        snprintf(new_card_description, sizeof(new_card_description), "Heals %d HP. Deals 50%% of heal as AOE damage.", 7 + new_bonus);
-        // Description for *existing* normal Heal cards
+        snprintf(new_card_description, sizeof(new_card_description), "Divine Strike: Heals %d HP. Deals 50%% of heal as AOE damage.", 7 + new_bonus);
         snprintf(existing_normal_description, sizeof(existing_normal_description), "Heals %d HP.", 7 + new_bonus);
 
-        // Update all cards of this type in the master deck
         for (int i = 0; i < deck->size; i++) {
             if (deck->cards[i].type == Heal) {
-                // --- MODIFIED: Update descriptions based on effect ---
                 if (deck->cards[i].effect == None) {
                     strncpy(deck->cards[i].description, existing_normal_description, sizeof(deck->cards[i].description) - 1);
                 }
                 else if (deck->cards[i].effect == DIVINE_STRIKE_EFFECT) {
-                    // Also update existing Divine Strike cards
                     strncpy(deck->cards[i].description, new_card_description, sizeof(deck->cards[i].description) - 1);
                 }
             }
         }
     }
     else if (selected_type == REWARD_SHIELD_CARD) {
+        if (player->shield_bonus == 0) add_cards = true; // --- MODIFIED
         player->shield_bonus += buff_increase;
         new_bonus = player->shield_bonus;
 
-        // Description for *normal* shield cards
         snprintf(existing_normal_description, sizeof(existing_normal_description), "Gains %d Shield.", 5 + new_bonus);
-        // Description for *Shield Bash* cards
         snprintf(existing_special_description, sizeof(existing_special_description), "Shield Bash:\nGain %d Shield, then deal damage equal to your new total Shield.", 5 + new_bonus);
 
-        // --- MODIFIED: Simplified logic since reward card is *always* Shield Bash ---
         strncpy(new_card_description, existing_special_description, sizeof(new_card_description));
 
-        // Now, update all existing shield cards in the deck
         for (int i = 0; i < deck->size; i++) {
             if (deck->cards[i].type == Shield) {
                 if (deck->cards[i].effect == None) {
@@ -397,30 +393,28 @@ bool ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player)
     }
 
 
-    // Get the selected card and reset its position/description for deck
-    Card selected_card = selected_card_template; // Use the template
+    // --- MODIFIED: Only add cards if the flag is set ---
+    if (add_cards) {
+        Card selected_card = selected_card_template;
 
-    CP_Vector deck_pos_topleft = CP_Vector_Set(50, 600);
-    selected_card.pos = CP_Vector_Set(
-        deck_pos_topleft.x + CARD_W_INIT / 2.0f,
-        deck_pos_topleft.y + CARD_H_INIT / 2.0f
-    );
+        CP_Vector deck_pos_topleft = CP_Vector_Set(50, 600);
+        selected_card.pos = CP_Vector_Set(
+            deck_pos_topleft.x + CARD_W_INIT / 2.0f,
+            deck_pos_topleft.y + CARD_H_INIT / 2.0f
+        );
 
-    selected_card.target_pos = CP_Vector_Set(0, 0);
-    selected_card.card_w = CARD_W_INIT;
-    selected_card.card_h = CARD_H_INIT;
-    selected_card.is_animating = false;
-    selected_card.is_discarding = false;
+        selected_card.target_pos = CP_Vector_Set(0, 0);
+        selected_card.card_w = CARD_W_INIT;
+        selected_card.card_h = CARD_H_INIT;
+        selected_card.is_animating = false;
+        selected_card.is_discarding = false;
 
-    // --- NEW: Set the description of the *new* card to the updated one ---
-    strncpy(selected_card.description, new_card_description, sizeof(selected_card.description) - 1);
+        strncpy(selected_card.description, new_card_description, sizeof(selected_card.description) - 1);
 
-    // --- MODIFIED: Add two copies of the card and check success ---
-    bool success1 = AddCardToDeck(deck, selected_card);
-    bool success2 = AddCardToDeck(deck, selected_card);
-
-    // Return true if *at least one* card was added.
-    return success1 || success2;
+        AddCardToDeck(deck, selected_card);
+        AddCardToDeck(deck, selected_card);
+    }
+    // --- END MODIFICATION ---
 }
 
 void ResetReward(RewardState* reward_state) {
