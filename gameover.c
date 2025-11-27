@@ -12,7 +12,7 @@ void GameOver_Init(void) {
     // 1. Reset Timer
     go_timer = 0.0f;
 
-    // 2. Load Font (Use the exact filename you used in game.c)
+    // 2. Load Font
     gameover_font = CP_Font_Load("Assets/Exo2-Regular.ttf");
 
     // Error Check: If font fails, print to console

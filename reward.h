@@ -1,6 +1,5 @@
 #pragma once
 #include "card.h"
-#include "deck.h"
 #include "game.h" // <-- MODIFIED: Include game.h to get Player type
 #include <stdbool.h>
 
@@ -29,6 +28,7 @@ typedef struct {
     int num_options;
     bool is_active;
     bool reward_claimed;
+    bool show_confirm_button;
     int selected_index;
 } RewardState;
 
@@ -42,9 +42,6 @@ void GenerateRewardOptions(RewardState* reward_state, Player* player);
 // Update reward screen
 // --- MODIFIED: Added Player* ---
 void UpdateReward(RewardState* reward_state, Deck* deck, Player* player);
-
-// Skip reward and proceed without adding a card
-void SkipReward(RewardState* reward_state);
 
 // Draw reward screen
 // --- MODIFIED: Added Player* ---

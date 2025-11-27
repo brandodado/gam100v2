@@ -10,14 +10,14 @@ typedef struct {
     int health;
     int max_health;
     int attack;
-    int max_attack; // <-- MODIFIED: Added for enrage reset
+    int max_attack; // Added for enrage reset
     int shield;
     bool alive;
     int dot_timing;
     bool is_necromancer;
     bool has_used_special;
     bool enrages;
-    int enrage_amount; // <-- MODIFIED: Added enrage amount
+    int enrage_amount; // Added to determine enrage amount
 } Enemy;
 
 // ---------------- Level 1 ----------------

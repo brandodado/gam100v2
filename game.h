@@ -13,14 +13,14 @@ typedef struct Player {
     bool has_lifesteal;
     bool has_desperate_draw;
     bool has_divine_strike;
-    bool has_shield_boost; // 25% shield buff
+    bool has_shield_boost; // Shield buff
 
     bool has_attack_boost_35;
     bool has_heal_boost_35;
     bool has_shield_boost_35;
 
     int checkpoint_level;
-    int death_count; // <-- MODIFIED: Added death counter
+    int death_count; // Death counter
 
     // --- Card Bonus Trackers ---
     int attack_bonus;
@@ -47,7 +47,7 @@ void ResetGame(void);        // If you call ResetGame from menu
 
 void ResetStageState(void);
 
-// --- MODIFIED: New/Updated functions ---
+// --- Game over functions ---
 void Game_Set_Restart_Flag(bool value);
 void Game_Increment_Death_Count(void);
 int Game_Get_Death_Count(void);

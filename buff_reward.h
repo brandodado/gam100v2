@@ -36,6 +36,7 @@ typedef struct {
     int num_options;
     bool is_active;
     bool reward_claimed;
+    bool show_confirm_button;
     int selected_index;
     CP_Vector option_pos[MAX_BUFF_OPTIONS];
     float option_w;

@@ -1,12 +1,12 @@
 ﻿#include "tutorial.h"       
 #include "cprocessing.h"    
 #include "mainmenu.h"       
-#include "utils.h"          // For IsAreaClicked
-#include <string.h>         // For strcmp function
+#include "utils.h"          
+#include <string.h>        
 
 // --- Static variables for this state ---
 static CP_Font tutorial_font;
-static int tutorialPage;    // Tracks which page we are on
+static int tutorialPage;  
 
 // --- Button Definitions ---
 #define TUTE_BUTTON_W 120.0f
@@ -29,10 +29,10 @@ static void DrawTutorialButton(const char* text, float x, float y, float w, floa
 
     // Draw button rectangle
     if (is_hovered) {
-        CP_Settings_Fill(CP_Color_Create(150, 150, 150, 255)); // Brighter
+        CP_Settings_Fill(CP_Color_Create(150, 150, 150, 255)); 
     }
     else {
-        CP_Settings_Fill(CP_Color_Create(80, 80, 80, 255)); // Dark gray
+        CP_Settings_Fill(CP_Color_Create(80, 80, 80, 255)); 
     }
 
     CP_Settings_StrokeWeight(2.0f);

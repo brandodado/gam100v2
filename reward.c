@@ -1,4 +1,4 @@
-#define _CRT_SECURE_NO_WARNINGS // <-- ADDED: Suppresses strncpy warnings
+#define _CRT_SECURE_NO_WARNINGS 
 #include "reward.h"
 #include "cprocessing.h"
 #include "utils.h"
@@ -6,10 +6,11 @@
 #include <string.h>
 #include <stdio.h>
 
+// Matching scale factor
+#define CARD_SCALE 1.5f
+
 #define REWARD_CARD_SPACING 150
 #define REWARD_CARD_Y 300
-#define SKIP_BUTTON_W 200
-#define SKIP_BUTTON_H 60
 
 static CP_Font reward_font;
 static bool font_loaded = false;
@@ -21,60 +22,61 @@ void InitReward(RewardState* reward_state) {
     reward_state->is_active = false;
     reward_state->reward_claimed = false;
     reward_state->selected_index = -1;
+    reward_state->show_confirm_button = false;
 
-    // Load font 
     if (!font_loaded) {
         reward_font = CP_Font_Load("Assets/Roboto-Regular.ttf");
         font_loaded = true;
     }
 }
 
-// --- MODIFIED: Added Player* to generate dynamic descriptions ---
+// This function creates 3 choices for the player to pick from
+// It dynamically generates the descriptions based on current stats
 void GenerateRewardOptions(RewardState* reward_state, Player* player) {
     if (!reward_state || !player) return;
 
     CP_Vector card_pos = CP_Vector_Set(0, 0);
-    float card_w = CARD_W_INIT * 1.5f;
-    float card_h = CARD_H_INIT * 1.5f;
 
-    // --- MODIFIED: Reduced scaling formula ---
+    float card_w = CARD_W_INIT * 4;
+    float card_h = CARD_H_INIT * 4;
+
+    // Calculate how much the bonus increases this time
     int buff_increase = 2 + player->card_reward_count;
 
-    // --- NEW: Calculate the NEXT bonus level ---
+    // Calculate future stats so we can show them to the player
     int next_attack_bonus = player->attack_bonus + buff_increase;
     int next_heal_bonus = player->heal_bonus + buff_increase;
     int next_shield_bonus = player->shield_bonus + buff_increase;
 
-    // --- NEW: Create dynamic descriptions ---
     char attack_desc[200];
     char heal_desc[200];
     char shield_desc[200];
 
-    // --- MODIFIED: Dynamic description based on if player already has a bonus ---
+    // Conditional descriptions: If it's the first time, we mention adding special cards.
+    // Otherwise, we just mention the passive buff increase.
     if (player->attack_bonus == 0) {
-        snprintf(attack_desc, sizeof(attack_desc), "Add 2 Cleave cards.\n\nall Attack cards do an additional +%d damage.", next_attack_bonus);
+        snprintf(attack_desc, sizeof(attack_desc), "Add 2 Cleave.\n\nAll Atk Cards\n+%d Dmg.", next_attack_bonus);
     }
     else {
-        snprintf(attack_desc, sizeof(attack_desc), "all Attack cards do an additional +%d damage.", next_attack_bonus);
+        snprintf(attack_desc, sizeof(attack_desc), "All Atk Cards\n+%d Dmg.", next_attack_bonus);
     }
 
     if (player->heal_bonus == 0) {
-        snprintf(heal_desc, sizeof(heal_desc), "Add 2 Divine Strike cards.\n\nall Heal cards do an additional +%d HP.", next_heal_bonus);
+        snprintf(heal_desc, sizeof(heal_desc), "Add 2 Divine.\n\nAll Heal Cards\n+%d HP.", next_heal_bonus);
     }
     else {
-        snprintf(heal_desc, sizeof(heal_desc), "all Heal cards do an additional +%d HP.", next_heal_bonus);
+        snprintf(heal_desc, sizeof(heal_desc), "All Heal Cards\n+%d HP.", next_heal_bonus);
     }
 
     if (player->shield_bonus == 0) {
-        snprintf(shield_desc, sizeof(shield_desc), "Add 2 Shield Bash cards.\n\nall Shield cards do an additional +%d Shield.", next_shield_bonus);
+        snprintf(shield_desc, sizeof(shield_desc), "Add 2 Bash.\n\nAll Shield Cards\n+%d Shield.", next_shield_bonus);
     }
     else {
-        snprintf(shield_desc, sizeof(shield_desc), "all Shield cards do an additional +%d Shield.", next_shield_bonus);
+        snprintf(shield_desc, sizeof(shield_desc), "All Shield Cards\n+%d Shield.", next_shield_bonus);
     }
-    // --- END MODIFICATION ---
 
 
-    // Create attack card reward
+    // Setup the actual Card data structures for the UI to draw
     Card attack_reward = {
         card_pos, card_pos, Attack, CLEAVE, 7, "",
         card_w, card_h, false, false
@@ -82,14 +84,12 @@ void GenerateRewardOptions(RewardState* reward_state, Player* player) {
     strncpy(attack_reward.description, attack_desc, sizeof(attack_reward.description) - 1);
 
 
-    // Create heal card reward
     Card heal_reward = {
         card_pos, card_pos, Heal, DIVINE_STRIKE_EFFECT, 7, "",
         card_w, card_h, false, false
     };
     strncpy(heal_reward.description, heal_desc, sizeof(heal_reward.description) - 1);
 
-    // Create shield card reward
     Card shield_reward = {
         card_pos, card_pos, Shield, SHIELD_BASH, 5, "",
         card_w, card_h, false, false
@@ -97,7 +97,7 @@ void GenerateRewardOptions(RewardState* reward_state, Player* player) {
     strncpy(shield_reward.description, shield_desc, sizeof(shield_reward.description) - 1);
 
 
-    // Add all three options
+    // Store them in the reward state
     reward_state->options[0].card = attack_reward;
     reward_state->options[0].type = REWARD_ATTACK_CARD;
     reward_state->options[0].is_selected = false;
@@ -114,15 +114,20 @@ void GenerateRewardOptions(RewardState* reward_state, Player* player) {
     reward_state->is_active = true;
     reward_state->reward_claimed = false;
     reward_state->selected_index = -1;
+    reward_state->show_confirm_button = false;
 }
 
+// Checks if mouse clicked on a specific card option
 bool IsRewardOptionClicked(RewardState* reward_state, int index, float mouse_x, float mouse_y) {
     if (!reward_state || index < 0 || index >= reward_state->num_options) {
         return false;
     }
 
     float window_width = (float)CP_System_GetWindowWidth();
-    float card_w = CARD_W_INIT * 1.5f; // Use consistent width
+
+    float card_w = CARD_W_INIT * CARD_SCALE;
+
+    // Center the group of cards horizontally
     float total_width = reward_state->num_options * card_w +
         (reward_state->num_options - 1) * REWARD_CARD_SPACING;
     float start_x = (window_width - total_width) / 2.0f + (card_w / 2.0f);
@@ -136,57 +141,49 @@ bool IsRewardOptionClicked(RewardState* reward_state, int index, float mouse_x, 
         mouse_x, mouse_y);
 }
 
-// --- MODIFIED: Added Player* to pass to ApplyRewardSelection ---
 void UpdateReward(RewardState* reward_state, Deck* deck, Player* player) {
     if (!reward_state || !reward_state->is_active || reward_state->reward_claimed) return;
 
-    // Check for mouse clicks on reward options
     if (CP_Input_MouseClicked()) {
         float mouse_x = (float)CP_Input_GetMouseX();
         float mouse_y = (float)CP_Input_GetMouseY();
 
-        // Check skip button
-        float window_width = (float)CP_System_GetWindowWidth();
-        float window_height = (float)CP_System_GetWindowHeight();
-        float skip_btn_x = window_width / 2.0f;
-        float skip_btn_y = (float)window_height - 150.0f;
+        // Check confirm button first
+        if (reward_state->show_confirm_button) {
+            float window_width = (float)CP_System_GetWindowWidth();
+            float window_height = (float)CP_System_GetWindowHeight();
+            float btn_x = window_width / 2.0f;
+            float btn_y = window_height - 150.0f;
+            float btn_w = 250.0f;
+            float btn_h = 60.0f;
 
-        if (IsAreaClicked(skip_btn_x, skip_btn_y, SKIP_BUTTON_W, SKIP_BUTTON_H, mouse_x, mouse_y)) {
-            SkipReward(reward_state);
-            return;
+            if (IsAreaClicked(btn_x, btn_y, btn_w, btn_h, mouse_x, mouse_y)) {
+                // Confirmed - apply reward
+                ApplyRewardSelection(reward_state, deck, player);
+                reward_state->reward_claimed = true;
+                reward_state->is_active = false;
+                return;
+            }
         }
 
         // Check card options
         for (int i = 0; i < reward_state->num_options; i++) {
             if (IsRewardOptionClicked(reward_state, i, mouse_x, mouse_y)) {
                 reward_state->selected_index = i;
-
-                // --- MODIFIED: Removed 'if' check ---
-                ApplyRewardSelection(reward_state, deck, player);
-                reward_state->reward_claimed = true;
-                reward_state->is_active = false;
+                reward_state->show_confirm_button = true; // Show confirm button
                 break;
             }
         }
     }
 }
 
-void SkipReward(RewardState* reward_state) {
-    if (!reward_state) return;
-
-    reward_state->reward_claimed = true;
-    reward_state->is_active = false;
-    reward_state->selected_index = -1; // No card selected
-}
-
-// --- MODIFIED: Added Player* to display current bonuses ---
 void DrawReward(RewardState* reward_state, Player* player) {
     if (!reward_state || !player || (!reward_state->is_active && !reward_state->reward_claimed)) return;
 
     float window_width = (float)CP_System_GetWindowWidth();
     float window_height = (float)CP_System_GetWindowHeight();
 
-    // 1. Draw Background Overlay (Using CORNER mode)
+    // 1. Darken background
     CP_Settings_RectMode(CP_POSITION_CORNER);
     CP_Settings_Fill(CP_Color_Create(0, 0, 0, 200));
     CP_Graphics_DrawRect(0, 0, window_width, window_height);
@@ -200,7 +197,8 @@ void DrawReward(RewardState* reward_state, Player* player) {
 
     CP_Settings_RectMode(CP_POSITION_CENTER);
 
-    float card_w = CARD_W_INIT * 1.5f;
+    float card_w = CARD_W_INIT * CARD_SCALE;
+
     float total_width = reward_state->num_options * card_w +
         (reward_state->num_options - 1) * REWARD_CARD_SPACING;
     float start_x = (window_width - total_width) / 2.0f + (card_w / 2.0f);
@@ -210,13 +208,12 @@ void DrawReward(RewardState* reward_state, Player* player) {
         float card_x = start_x + i * (card_w + REWARD_CARD_SPACING);
         float card_y = REWARD_CARD_Y;
 
-        // Update position for logic
         reward_state->options[i].card.pos = CP_Vector_Set(card_x, card_y);
 
-        // A. HANDLE REWARD CLAIMED STATE
+        // Draw highlights logic
         if (reward_state->reward_claimed) {
             if (i == reward_state->selected_index) {
-                // Draw a Green Box BEHIND the selected card
+                // Green highlight for selected
                 CP_Settings_Fill(CP_Color_Create(0, 255, 0, 100));
                 CP_Settings_NoStroke();
                 CP_Graphics_DrawRect(card_x, card_y,
@@ -224,8 +221,8 @@ void DrawReward(RewardState* reward_state, Player* player) {
                     reward_state->options[i].card.card_h * 1.1f);
             }
             else {
-                // Draw Gray overlay ON TOP of non-selected cards
-                DrawCard(&reward_state->options[i].card); // Draw card first
+                // Grey out others
+                DrawCard(&reward_state->options[i].card, player);
                 CP_Settings_Fill(CP_Color_Create(0, 0, 0, 150));
                 CP_Graphics_DrawRect(card_x, card_y,
                     reward_state->options[i].card.card_w,
@@ -233,14 +230,13 @@ void DrawReward(RewardState* reward_state, Player* player) {
                 continue;
             }
         }
-        // B. HANDLE NORMAL SELECTION STATE
         else {
+            // Hover effect
             float mouse_x = (float)CP_Input_GetMouseX();
             float mouse_y = (float)CP_Input_GetMouseY();
 
             if (IsRewardOptionClicked(reward_state, i, mouse_x, mouse_y)) {
-                // Draw Yellow Glow BEHIND card
-                CP_Settings_Fill(CP_Color_Create(255, 255, 0, 150)); // Semi-transparent yellow
+                CP_Settings_Fill(CP_Color_Create(255, 255, 0, 150));
                 CP_Settings_NoStroke();
                 CP_Graphics_DrawRect(card_x, card_y,
                     reward_state->options[i].card.card_w * 1.1f,
@@ -248,13 +244,13 @@ void DrawReward(RewardState* reward_state, Player* player) {
             }
         }
 
-        // Reset settings before drawing the card content to prevent color bleed
+        // Reset for drawing card content
         CP_Settings_Stroke(CP_Color_Create(0, 0, 0, 255));
         CP_Settings_StrokeWeight(1);
 
-        DrawCard(&reward_state->options[i].card); // This now draws the dynamic description
+        DrawCard(&reward_state->options[i].card, player);
 
-        // --- NEW: Draw "Current Bonus" label ---
+        // Draw "Current Bonus" text below card
         CP_Settings_Fill(CP_Color_Create(220, 220, 255, 255));
         CP_Settings_TextSize(18);
         CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
@@ -274,29 +270,31 @@ void DrawReward(RewardState* reward_state, Player* player) {
         CP_Font_DrawText(current_bonus_text, card_x, text_y);
     }
 
-    // 4. Draw Skip Button
-    float skip_btn_x = window_width / 2.0f;
-    float skip_btn_y = (float)window_height - 150.0f;
-    float mx = (float)CP_Input_GetMouseX();
-    float my = (float)CP_Input_GetMouseY();
+    // 4. Draw Confirm Button
+    if (reward_state->show_confirm_button && !reward_state->reward_claimed) {
+        float window_width = (float)CP_System_GetWindowWidth();
+        float window_height = (float)CP_System_GetWindowHeight();
+        float btn_x = window_width / 2.0f;
+        float btn_y = window_height - 150.0f;
+        float btn_w = 250.0f;
+        float btn_h = 60.0f;
 
-    if (IsAreaClicked(skip_btn_x, skip_btn_y, SKIP_BUTTON_W, SKIP_BUTTON_H, mx, my)) {
-        CP_Settings_Fill(CP_Color_Create(150, 50, 50, 255));
+        float mouse_x = (float)CP_Input_GetMouseX();
+        float mouse_y = (float)CP_Input_GetMouseY();
+        bool is_hovered = IsAreaClicked(btn_x, btn_y, btn_w, btn_h, mouse_x, mouse_y);
+
+        // Button background
+        CP_Settings_Fill(is_hovered ? CP_Color_Create(80, 200, 80, 255) : CP_Color_Create(50, 150, 50, 255));
+        CP_Settings_Stroke(CP_Color_Create(255, 255, 255, 255));
+        CP_Settings_StrokeWeight(3);
+        CP_Graphics_DrawRect(btn_x, btn_y, btn_w, btn_h);
+
+        // Button text
+        CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
+        CP_Settings_TextSize(28);
+        CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
+        CP_Font_DrawText("CONFIRM", btn_x, btn_y);
     }
-    else {
-        CP_Settings_Fill(CP_Color_Create(100, 100, 100, 255));
-    }
-
-    CP_Settings_RectMode(CP_POSITION_CENTER);
-    CP_Graphics_DrawRect(skip_btn_x, skip_btn_y, SKIP_BUTTON_W, SKIP_BUTTON_H);
-
-    CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
-    CP_Settings_TextSize(24);
-
-    // --- FIX: Re-set text alignment to center-middle ---
-    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
-
-    CP_Font_DrawText("Skip Reward", skip_btn_x, skip_btn_y); // Centered text
 
     // 5. Draw Footer Text
     CP_Settings_Fill(CP_Color_Create(200, 200, 200, 255));
@@ -306,19 +304,21 @@ void DrawReward(RewardState* reward_state, Player* player) {
     if (reward_state->reward_claimed) {
         CP_Font_DrawText("Proceeding to next level...", window_width / 2.0f, window_height - 100.0f);
     }
+    else if (reward_state->show_confirm_button) {
+        CP_Font_DrawText("Click CONFIRM to add to deck", window_width / 2.0f, window_height - 100.0f);
+    }
     else {
-        CP_Font_DrawText("Click a card to add to deck", window_width / 2.0f, window_height - 100.0f);
+        CP_Font_DrawText("Click a card to select", window_width / 2.0f, window_height - 100.0f);
     }
 }
 
-// --- MODIFIED: Changed to void return type ---
+// Updates player stats and optionally adds cards to the deck
 void ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player) {
     if (!reward_state || !deck || !player || reward_state->selected_index < 0 ||
         reward_state->selected_index >= reward_state->num_options) {
         return;
     }
 
-    // --- MODIFIED: Reduced scaling formula ---
     int buff_increase = 2 + player->card_reward_count;
     RewardType selected_type = reward_state->options[reward_state->selected_index].type;
     Card selected_card_template = reward_state->options[reward_state->selected_index].card;
@@ -330,15 +330,17 @@ void ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player)
     char existing_special_description[200];
 
     int new_bonus = 0;
-    bool add_cards = false; // --- MODIFIED: Flag to control adding cards ---
+    bool add_cards = false;
 
+    // Logic based on what type was picked
+    // We update existing card descriptions in the deck to reflect new stats
     if (selected_type == REWARD_ATTACK_CARD) {
-        if (player->attack_bonus == 0) add_cards = true; // --- MODIFIED
+        if (player->attack_bonus == 0) add_cards = true; // Only add Special cards first time
         player->attack_bonus += buff_increase;
         new_bonus = player->attack_bonus;
 
-        snprintf(new_card_description, sizeof(new_card_description), "Cleave: Deals %d damage to ALL enemies.", 7 + new_bonus);
-        snprintf(existing_normal_description, sizeof(existing_normal_description), "Deals %d damage.", 7 + new_bonus);
+        snprintf(new_card_description, sizeof(new_card_description), "Cleave:\n%d Dmg (AOE)", 7 + new_bonus);
+        snprintf(existing_normal_description, sizeof(existing_normal_description), "Deal %d Dmg.", 7 + new_bonus);
 
         for (int i = 0; i < deck->size; i++) {
             if (deck->cards[i].type == Attack) {
@@ -352,12 +354,12 @@ void ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player)
         }
     }
     else if (selected_type == REWARD_HEAL_CARD) {
-        if (player->heal_bonus == 0) add_cards = true; // --- MODIFIED
+        if (player->heal_bonus == 0) add_cards = true;
         player->heal_bonus += buff_increase;
         new_bonus = player->heal_bonus;
 
-        snprintf(new_card_description, sizeof(new_card_description), "Divine Strike: Heals %d HP. Deals 50%% of heal as AOE damage.", 7 + new_bonus);
-        snprintf(existing_normal_description, sizeof(existing_normal_description), "Heals %d HP.", 7 + new_bonus);
+        snprintf(new_card_description, sizeof(new_card_description), "Divine:\nHeal %d\n50%% Dmg (AOE)", 7 + new_bonus);
+        snprintf(existing_normal_description, sizeof(existing_normal_description), "Heal %d HP.", 7 + new_bonus);
 
         for (int i = 0; i < deck->size; i++) {
             if (deck->cards[i].type == Heal) {
@@ -371,12 +373,12 @@ void ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player)
         }
     }
     else if (selected_type == REWARD_SHIELD_CARD) {
-        if (player->shield_bonus == 0) add_cards = true; // --- MODIFIED
+        if (player->shield_bonus == 0) add_cards = true;
         player->shield_bonus += buff_increase;
         new_bonus = player->shield_bonus;
 
-        snprintf(existing_normal_description, sizeof(existing_normal_description), "Gains %d Shield.", 5 + new_bonus);
-        snprintf(existing_special_description, sizeof(existing_special_description), "Shield Bash:\nGain %d Shield, then deal damage equal to your new total Shield.", 5 + new_bonus);
+        snprintf(existing_normal_description, sizeof(existing_normal_description), "Gain %d Shield.", 5 + new_bonus);
+        snprintf(existing_special_description, sizeof(existing_special_description), "Bash:\nGain %d Shield\n Damage dealt = Shield", 5 + new_bonus);
 
         strncpy(new_card_description, existing_special_description, sizeof(new_card_description));
 
@@ -392,8 +394,7 @@ void ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player)
         }
     }
 
-
-    // --- MODIFIED: Only add cards if the flag is set ---
+    // If this is the first time selecting this type, add 2 special cards to the deck
     if (add_cards) {
         Card selected_card = selected_card_template;
 
@@ -404,8 +405,11 @@ void ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player)
         );
 
         selected_card.target_pos = CP_Vector_Set(0, 0);
-        selected_card.card_w = CARD_W_INIT;
-        selected_card.card_h = CARD_H_INIT;
+
+        // Ensure correct sizing
+        selected_card.card_w = CARD_W_INIT * CARD_SCALE;
+        selected_card.card_h = CARD_H_INIT * CARD_SCALE;
+
         selected_card.is_animating = false;
         selected_card.is_discarding = false;
 
@@ -414,7 +418,6 @@ void ApplyRewardSelection(RewardState* reward_state, Deck* deck, Player* player)
         AddCardToDeck(deck, selected_card);
         AddCardToDeck(deck, selected_card);
     }
-    // --- END MODIFICATION ---
 }
 
 void ResetReward(RewardState* reward_state) {

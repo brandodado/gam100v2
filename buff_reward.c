@@ -72,6 +72,7 @@ void InitBuffReward(BuffRewardState* state) {
     state->selected_index = -1;
     state->option_w = BUFF_OPTION_W;
     state->option_h = BUFF_OPTION_H;
+    state->show_confirm_button = false;
 
     if (!font_loaded) {
         buff_font = CP_Font_Load("Assets/Roboto-Regular.ttf");
@@ -110,8 +111,8 @@ void GenerateBuffOptions(BuffRewardState* state, int current_level) {
         snprintf(state->options[0].description, sizeof(state->options[0].description), "Heal for 50%% of damage you deal with Attack cards.");
 
         state->options[1].type = BUFF_DESPERATE_DRAW;
-        state->options[1].title = "Sudden Insight";
-        snprintf(state->options[1].description, sizeof(state->options[1].description), "Draw 3 cards at the start of your turn if your hand is empty.");
+        state->options[1].title = "Card Mastery";
+        snprintf(state->options[1].description, sizeof(state->options[1].description), "Draw 1 additional card at the start of each turn.");
 
         state->options[2].type = BUFF_SHIELD_BOOST;
         state->options[2].title = "Reinforce";
@@ -138,8 +139,8 @@ void GenerateBuffOptions(BuffRewardState* state, int current_level) {
         snprintf(state->options[0].description, sizeof(state->options[0].description), "Heal for 50%% of damage you deal with Attack cards.");
 
         state->options[1].type = BUFF_DESPERATE_DRAW;
-        state->options[1].title = "Sudden Insight";
-        snprintf(state->options[1].description, sizeof(state->options[1].description), "Draw 3 cards at the start of your turn if your hand is empty.");
+        state->options[1].title = "Card Mastery";
+        snprintf(state->options[1].description, sizeof(state->options[1].description), "Draw 1 additional card at the start of each turn.");
 
         state->options[2].type = BUFF_ATTACK_UP;
         state->options[2].title = "Rage";
@@ -150,6 +151,7 @@ void GenerateBuffOptions(BuffRewardState* state, int current_level) {
     state->is_active = true;
     state->reward_claimed = false;
     state->selected_index = -1;
+    state->show_confirm_button = false;
 }
 
 void UpdateBuffReward(BuffRewardState* state, Player* player) {
@@ -159,12 +161,29 @@ void UpdateBuffReward(BuffRewardState* state, Player* player) {
         float mouse_x = (float)CP_Input_GetMouseX();
         float mouse_y = (float)CP_Input_GetMouseY();
 
-        for (int i = 0; i < state->num_options; i++) {
-            if (IsAreaClicked(state->option_pos[i].x, state->option_pos[i].y, state->option_w, state->option_h, mouse_x, mouse_y)) {
-                state->selected_index = i;
+        // Check confirm button first
+        if (state->show_confirm_button) {
+            float ww = (float)CP_System_GetWindowWidth();
+            float wh = (float)CP_System_GetWindowHeight();
+            float btn_x = ww / 2.0f;
+            float btn_y = wh - 150.0f;
+            float btn_w = 250.0f;
+            float btn_h = 60.0f;
+
+            if (IsAreaClicked(btn_x, btn_y, btn_w, btn_h, mouse_x, mouse_y)) {
+                // Confirmed - apply buff
                 ApplyBuffReward(state, player);
                 state->reward_claimed = true;
                 state->is_active = false;
+                return;
+            }
+        }
+
+        // Check buff options
+        for (int i = 0; i < state->num_options; i++) {
+            if (IsAreaClicked(state->option_pos[i].x, state->option_pos[i].y, state->option_w, state->option_h, mouse_x, mouse_y)) {
+                state->selected_index = i;
+                state->show_confirm_button = true; // Show confirm button
                 return;
             }
         }
@@ -225,6 +244,40 @@ void DrawBuffReward(BuffRewardState* state) {
         float text_box_x = pos.x - (text_box_w / 2.0f);
         float text_box_y = pos.y - (state->option_h / 2.0f) + 50.0f;
         CP_Font_DrawTextBox(state->options[i].description, text_box_x, text_box_y, text_box_w);
+    }
+    // 4. Draw Confirm Button
+    if (state->show_confirm_button && !state->reward_claimed) {
+        float btn_x = ww / 2.0f;
+        float btn_y = wh - 150.0f;
+        float btn_w = 250.0f;
+        float btn_h = 60.0f;
+
+        bool is_hovered = IsAreaClicked(btn_x, btn_y, btn_w, btn_h, mouse_x, mouse_y);
+
+        // Button background
+        CP_Settings_Fill(is_hovered ? CP_Color_Create(80, 200, 80, 255) : CP_Color_Create(50, 150, 50, 255));
+        CP_Settings_Stroke(CP_Color_Create(255, 255, 255, 255));
+        CP_Settings_StrokeWeight(3);
+        CP_Settings_RectMode(CP_POSITION_CENTER);
+        CP_Graphics_DrawRect(btn_x, btn_y, btn_w, btn_h);
+
+        // Button text
+        CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
+        CP_Settings_TextSize(28);
+        CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
+        CP_Font_DrawText("CONFIRM", btn_x, btn_y);
+    }
+
+    // 5. Footer text
+    CP_Settings_Fill(CP_Color_Create(200, 200, 200, 255));
+    CP_Settings_TextSize(20);
+    CP_Settings_TextAlignment(CP_TEXT_ALIGN_H_CENTER, CP_TEXT_ALIGN_V_MIDDLE);
+
+    if (state->show_confirm_button) {
+        CP_Font_DrawText("Click CONFIRM to gain this power-up", ww / 2.0f, wh - 80.0f);
+    }
+    else {
+        CP_Font_DrawText("Click a power-up to select", ww / 2.0f, wh - 80.0f);
     }
 }
 
