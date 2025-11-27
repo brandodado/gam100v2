@@ -4,11 +4,11 @@
 #define MAX_DECK_SIZE 25
 
 // Deck struct to manage player's card collection
-typedef struct {
-    Card cards[MAX_DECK_SIZE];
-    int size;
-    int capacity;
-} Deck;
+//typedef struct {
+//    Card cards[MAX_DECK_SIZE];
+//    int size;
+//    int capacity;
+//} Deck;
 
 // Initialize deck with starting cards
 void InitDeck(Deck* deck);

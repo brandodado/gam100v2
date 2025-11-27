@@ -58,7 +58,7 @@ void SelectCard(int index, int* selected);
 float CalculateCardScale(int hand_size);
 void SetHandPos(Card* hand, int hand_size);
 void DealFromDeck(Deck* deck, Card* hand_slot, int* hand_size);
-//int UseCard(Card* hand, int* selected_index, int* hand_size, Player* player_ptr, Enemy* enemy_ptr);
+int UseCard(Card* hand, int* selected_index, int* hand_size, Player* player_ptr, Enemy* enemy_ptr);
 void RecycleDeck(Card* discard, Deck* deck, int* discard_size);
 void AnimateMoveCard(Card* hand, float speed);
 void ShuffleDeck(Deck* deck);

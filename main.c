@@ -1,4 +1,6 @@
 #include "cprocessing.h"
+#include <stdio.h>
+#include <time.h>
 #include "mainmenu.h"
 #include "card.h"
 #include "intro.h"

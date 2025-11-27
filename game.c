@@ -699,7 +699,7 @@ void Game_Init(void)
         }
     }
 
-    Audio_Init;
+    Audio_Init();
 
     // Load SFX
     sfx_shield = CP_Sound_Load("Assets/shield_sfx.ogg");
