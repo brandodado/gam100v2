@@ -1,16 +1,16 @@
+// Definitions and function prototypes for Card objects and interactions.
 #pragma once
 #include "cprocessing.h"
 #include <stdbool.h>
-#include "levels.h"  // Get Enemy type
+#include "levels.h"
 
 #define CARD_W_INIT 60
 #define CARD_H_INIT 90
 #define MAX_DECK_SIZE 25
 
-// Forward declare Player (game.h will provide full definition later)
+// Forward declare Player
 typedef struct Player Player;
 
-// Card enums 
 typedef enum {
 	Attack,
 	Heal,
@@ -27,7 +27,6 @@ typedef enum {
 	DIVINE_STRIKE_EFFECT
 } CardEffect;
 
-// Card struct
 typedef struct Card {
 	CP_Vector pos;
 	CP_Vector target_pos;
@@ -41,35 +40,38 @@ typedef struct Card {
 	bool is_discarding;
 } Card;
 
-// Deck struct
 typedef struct Deck {
 	Card cards[MAX_DECK_SIZE];
 	int size;
 	int capacity;
 } Deck;
 
-// Global card catalogue
 extern Card catalogue[50];
 extern int catalogue_size;
 
-// Card functions
-void DrawCard(Card* handptr, Player* player_ptr);
-void SelectCard(int index, int* selected);
-float CalculateCardScale(int hand_size);
-void SetHandPos(Card* hand, int hand_size);
-void DealFromDeck(Deck* deck, Card* hand_slot, int* hand_size);
-int UseCard(Card* hand, int* selected_index, int* hand_size, Player* player_ptr, Enemy* enemy_ptr);
-void RecycleDeck(Card* discard, Deck* deck, int* discard_size);
-void AnimateMoveCard(Card* hand, float speed);
-void ShuffleDeck(Deck* deck);
-int LoadCatalogue(const char* fcat, Card* cat_arr, int max_size);
+// Renders the visual representation of the card pointed to by handptr to the screen, using player context if needed.
+void DrawCard(Card* hand);
 
-// Deck functions
-void InitDeck(Deck* deck);
-bool AddCardToDeck(Deck* deck, Card card);
-bool RemoveCardFromDeck(Deck* deck, int index);
-Card GetDeckCard(Deck* deck, int index);
-bool IsDeckFull(Deck* deck);
-bool IsDeckEmpty(Deck* deck);
-int GetDeckSize(Deck* deck);
-void ClearDeck(Deck* deck);
+// Toggles the selection state of the card at the specified index, updating the selected variable.
+void SelectCard(int index, int* selected);
+
+// Calculates and returns the scaling factor for cards to ensure they fit on screen based on the current hand_size.
+float CalculateCardScale(int hand_size);
+
+// Updates the target positions of all cards in the hand array for proper layout.
+void SetHandPos(Card* hand, int hand_size);
+
+// Moves a card from the deck to the specified hand_slot and increments the hand_size counter.
+void DealFromDeck(Deck* deck, Card* hand_slot, int* hand_size);
+
+// Moves all cards from the discard pile back into the deck, resets the discard_size, and shuffles the deck.
+void RecycleDeck(Card* discard, Deck* deck, int* discard_size);
+
+// Updates the card's current position to move towards its target position at the specified speed.
+void AnimateMoveCard(Card* hand, float speed);
+
+// Randomizes the order of cards currently in the deck.
+void ShuffleDeck(Deck* deck);
+
+// Loads card definitions from the text file (fcat) into the catalogue array (cat_arr). Returns the number of cards loaded.
+int LoadCatalogue(const char* fcat, Card* cat_arr, int max_size);

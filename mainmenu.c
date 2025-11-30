@@ -4,6 +4,7 @@
 #include "utils.h"
 #include "tutorial.h"
 #include "victory.h"
+#include "credit.h"
 
 #define BUTTON_WIDTH 300.0f
 #define BUTTON_HEIGHT 80.0f
@@ -13,9 +14,11 @@
 static float button_start_x, button_start_y;
 static float button_tutorial_x, button_tutorial_y;
 static float button_quit_x, button_quit_y;
+static float button_credits_x, button_credits_y;
 
 static CP_Font menu_font;
 
+// Initializes the menu system, resets game flags, loads assets, and lays out buttons.
 void Main_Menu_Init(void)
 {
     Game_Set_Restart_Flag(false);
@@ -33,17 +36,17 @@ void Main_Menu_Init(void)
 
     // Stack buttons vertically
     button_start_y = center_y - BUTTON_HEIGHT - BUTTON_SPACING; // Top button
-    button_tutorial_y = center_y;                              // Middle button
-    button_quit_y = center_y + BUTTON_HEIGHT + BUTTON_SPACING; // Bottom button
+    button_tutorial_y = center_y;                              // Second button
+    button_credits_y = center_y + BUTTON_HEIGHT + BUTTON_SPACING; // third button
+    button_quit_y = center_y + 2 * ( BUTTON_HEIGHT + BUTTON_SPACING); // Bottom button
 
     button_start_x = center_x;
     button_tutorial_x = center_x;
     button_quit_x = center_x;
+    button_credits_x = center_x;
 }
 
-/**
- * \brief Helper function to draw a single button
- */
+// Helper function to draw a single menu button with hover effects.
 static void DrawButton(const char* text, float x, float y, float w, float h, int is_hovered)
 {
     CP_Settings_RectMode(CP_POSITION_CENTER);
@@ -62,6 +65,7 @@ static void DrawButton(const char* text, float x, float y, float w, float h, int
     CP_Font_DrawText(text, x, y + 2); // Small offset for better vertical centering
 }
 
+// Renders the background and buttons, and checks for mouse interaction to trigger state changes.
 void Main_Menu_Update(void)
 {
     CP_Graphics_ClearBackground(CP_Color_Create(20, 25, 28, 255));
@@ -75,10 +79,12 @@ void Main_Menu_Update(void)
     int hover_start = IsAreaClicked(button_start_x, button_start_y, BUTTON_WIDTH, BUTTON_HEIGHT, mouse_x, mouse_y);
     int hover_tutorial = IsAreaClicked(button_tutorial_x, button_tutorial_y, BUTTON_WIDTH, BUTTON_HEIGHT, mouse_x, mouse_y);
     int hover_quit = IsAreaClicked(button_quit_x, button_quit_y, BUTTON_WIDTH, BUTTON_HEIGHT, mouse_x, mouse_y);
+    int hover_credits = IsAreaClicked(button_credits_x, button_credits_y, BUTTON_WIDTH, BUTTON_HEIGHT, mouse_x, mouse_y);
 
     // --- Draw buttons ---
     DrawButton("START GAME", button_start_x, button_start_y, BUTTON_WIDTH, BUTTON_HEIGHT, hover_start);
     DrawButton("TUTORIAL", button_tutorial_x, button_tutorial_y, BUTTON_WIDTH, BUTTON_HEIGHT, hover_tutorial);
+    DrawButton("CREDITS", button_credits_x, button_credits_y, BUTTON_WIDTH, BUTTON_HEIGHT, hover_credits);
     DrawButton("QUIT", button_quit_x, button_quit_y, BUTTON_WIDTH, BUTTON_HEIGHT, hover_quit);
 
     // --- Check for clicks ---
@@ -90,12 +96,15 @@ void Main_Menu_Update(void)
         }
         else if (hover_tutorial) {
             // 2. Go to Tutorial
-            // This call now works because we included "tutorial.h"
             CP_Engine_SetNextGameState(Tutorial_Init, Tutorial_Update, Tutorial_Exit);
         }
         else if (hover_quit) {
             // 3. Exit Menu (Quit Game)
             CP_Engine_Terminate();
+        }
+        else if (hover_credits) {
+            // 4. Play Credits
+            CP_Engine_SetNextGameState(Credits_Init, Credits_Update, Credits_Exit);
         }
     }
 

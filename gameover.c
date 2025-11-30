@@ -8,6 +8,7 @@
 static CP_Font gameover_font;
 static float go_timer = 0.0f;
 
+// Loads resources and resets the timer for the Game Over screen.
 void GameOver_Init(void) {
     // 1. Reset Timer
     go_timer = 0.0f;
@@ -21,6 +22,7 @@ void GameOver_Init(void) {
     }
 }
 
+// Renders the Game Over text and buttons, handling restarts from checkpoints.
 void GameOver_Update(void) {
     // 1. Clear Background (Black)
     CP_Graphics_ClearBackground(CP_Color_Create(0, 0, 0, 255));
@@ -89,6 +91,7 @@ void GameOver_Update(void) {
     }
 }
 
+// Frees the font resource for the Game Over screen.
 void GameOver_Exit(void) {
     // Cleanup
     if (gameover_font) {

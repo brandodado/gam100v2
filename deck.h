@@ -1,35 +1,27 @@
+// Management functions for the Deck structure.
 #pragma once
 #include "card.h"
 
-#define MAX_DECK_SIZE 25
-
-// Deck struct to manage player's card collection
-//typedef struct {
-//    Card cards[MAX_DECK_SIZE];
-//    int size;
-//    int capacity;
-//} Deck;
-
-// Initialize deck with starting cards
+// Initializes the deck with a standard set of starting cards.
 void InitDeck(Deck* deck);
 
-// Add a card to deck
+// Adds a single card to the deck. Returns true if successful, or false if the deck is full.
 bool AddCardToDeck(Deck* deck, Card card);
 
-// Remove a card from deck at a specific index
+// Removes the card at the specified index from the deck and shifts remaining cards. Returns true if successful.
 bool RemoveCardFromDeck(Deck* deck, int index);
 
-// Get a card from deck (returns a copy)
+// Retrieves a copy of the card at the specified index from the deck. Returns a dummy card if the index is invalid.
 Card GetDeckCard(Deck* deck, int index);
 
-// Check if deck is full
+// Checks if the deck has reached its capacity. Returns true if full.
 bool IsDeckFull(Deck* deck);
 
-// Check if deck is empty
+// Checks if the deck has no cards. Returns true if empty.
 bool IsDeckEmpty(Deck* deck);
 
-// Get current size of deck
+// Returns the current number of cards in the deck.
 int GetDeckSize(Deck* deck);
 
-// Clear deck
+// Resets the deck size to zero, effectively clearing it.
 void ClearDeck(Deck* deck);

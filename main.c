@@ -1,3 +1,4 @@
+// Entry point for the application.
 #include "cprocessing.h"
 #include <stdio.h>
 #include <time.h>
@@ -5,6 +6,8 @@
 #include "card.h"
 #include "intro.h"
 
+// Main execution function. Sets up the window, seeds RNG, loads static data (catalogue),
+// and starts the CProcessing engine with the Intro state. Returns 0 on success.
 int main(void)
 {
     // Seed the random number generator

@@ -1,3 +1,4 @@
+// Enemy definitions and configuration data.
 #pragma once
 #include <stdbool.h>
 
@@ -5,7 +6,7 @@
 #define _level_H
 
 // ---------------- Enemy struct ----------------
-typedef struct {
+typedef struct { // Represents a single enemy unit with stats and flags.
     const char* name;
     int health;
     int max_health;
@@ -13,13 +14,14 @@ typedef struct {
     int max_attack; // Added for enrage reset
     int shield;
     bool alive;
-    int dot_timing;
-    bool is_necromancer;
+    int dot_timing; // Damage over time tracking (unused)
+    bool is_necromancer; // Special flag for reviving (unused)
     bool has_used_special;
-    bool enrages;
+    bool enrages; // Flag for enrage mechanic
     int enrage_amount; // Added to determine enrage amount
 } Enemy;
 
+// Extern declarations for enemy arrays per level
 // ---------------- Level 1 ----------------
 extern Enemy level1_enemies[];
 extern int level1_enemy_count;

@@ -1,5 +1,5 @@
 #include "cprocessing.h"
-#include "mainmenu.h"
+#include "credit.h"
 #include "game.h"     // To get the death count
 #include "utils.h"    // For IsAreaClicked
 #include <stdio.h>
@@ -7,6 +7,7 @@
 static CP_Font victory_font;
 static float vo_timer = 0.0f; // Timer to prevent accidental clicks
 
+// Loads the victory font and resets the input delay timer.
 void Victory_Init(void) {
     vo_timer = 0.0f;
     victory_font = CP_Font_Load("Assets/Exo2-Regular.ttf");
@@ -15,6 +16,7 @@ void Victory_Init(void) {
     }
 }
 
+// Renders the victory screen, calculates star rating based on deaths, and handles menu return.
 void Victory_Update(void) {
     CP_Graphics_ClearBackground(CP_Color_Create(10, 20, 10, 255)); // Dark green background
 
@@ -77,17 +79,19 @@ void Victory_Update(void) {
 
     CP_Settings_Fill(CP_Color_Create(255, 255, 255, 255));
     CP_Settings_TextSize(30.0f);
-    CP_Font_DrawText("Return to Menu", menu_btn_x, menu_btn_y);
+    CP_Font_DrawText("Go to Credits", menu_btn_x, menu_btn_y);
 
     // 6. Handle Input
     vo_timer += CP_System_GetDt();
     if (vo_timer > 0.5f && CP_Input_MouseClicked()) {
         if (hover_menu) {
-            CP_Engine_SetNextGameState(Main_Menu_Init, Main_Menu_Update, Main_Menu_Exit);
+            // move to credits
+            CP_Engine_SetNextGameState(Credits_Init, Credits_Update, Credits_Exit);
         }
     }
 }
 
+// Frees the font used in the victory screen.
 void Victory_Exit(void) {
     if (victory_font) {
         CP_Font_Free(victory_font);

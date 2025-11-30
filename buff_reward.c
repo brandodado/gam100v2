@@ -1,4 +1,6 @@
-#define _CRT_SECURE_NO_WARNINGS // <-- ADDED: Suppresses strncpy warnings
+// Handles the logic and rendering for the Buff Reward screen (Boss Levels).
+
+#define _CRT_SECURE_NO_WARNINGS // Suppresses strncpy warnings
 #include "buff_reward.h"
 #include "game.h"       // Include game.h to get the full Player struct definition
 #include "utils.h"      // For IsAreaClicked
@@ -12,7 +14,7 @@ static bool font_loaded = false;
 #define BUFF_OPTION_H 150.0f
 #define BUFF_SPACING 50.0f
 
-// --- Helper function to apply the chosen buff ---
+// Helper function to apply the selected permanent buff to the player's stats based on selection index.
 static void ApplyBuffReward(BuffRewardState* state, Player* player) {
     if (!player || state->selected_index < 0 || state->selected_index >= state->num_options) {
         return;
@@ -20,7 +22,7 @@ static void ApplyBuffReward(BuffRewardState* state, Player* player) {
 
     BuffType selected_buff = state->options[state->selected_index].type;
 
-    // --- MODIFIED: Calculate scaling buff amount ---
+    // --- Calculate scaling buff amount ---
     int boss_count = 0;
     if (player->max_health > 50) boss_count++; // Simple check if Lvl 3 buff was taken
     if (player->max_health > 70) boss_count++; // Simple check if Lvl 6 buff was taken
@@ -43,10 +45,10 @@ static void ApplyBuffReward(BuffRewardState* state, Player* player) {
         player->has_shield_boost = true;
         break;
     case BUFF_ATTACK_UP:
-        // --- MODIFIED: Use scaling value ---
+        // --- Use scaling value ---
         player->attack += attack_gain;
         break;
-        // --- MODIFIED: Added Lvl 6 Buffs ---
+        // --- Added Lvl 6 Buffs ---
     case BUFF_ATTACK_BOOST_35:
         player->has_attack_boost_35 = true;
         break;
@@ -62,7 +64,7 @@ static void ApplyBuffReward(BuffRewardState* state, Player* player) {
     }
 }
 
-
+// Initializes the Buff Reward state, resets selection flags, and pre-calculates layout positions.
 void InitBuffReward(BuffRewardState* state) {
     if (!state) return;
 
@@ -94,16 +96,16 @@ void InitBuffReward(BuffRewardState* state) {
     }
 }
 
-// --- MODIFIED: Added current_level to generate dynamic buff descriptions ---
+// Generates 3 specific buff options based on the current level tier (3, 6, or 9).
 void GenerateBuffOptions(BuffRewardState* state, int current_level) {
     if (!state) return;
 
-    // --- MODIFIED: Calculate scaling buff amounts ---
+    // --- Calculate scaling buff amounts ---
     int boss_count = (current_level / 3) - 1; // Lvl 3 -> 0, Lvl 6 -> 1, Lvl 9 -> 2
     int attack_gain = 2 + (1 * boss_count);
 
 
-    // --- MODIFIED: Different buffs for Lvl 3, 6, and 9 ---
+    // --- Different buffs for Lvl 3, 6, and 9 ---
     if (current_level == 3) {
         // --- Lvl 3 Buffs ---
         state->options[0].type = BUFF_LIFESTEAL;
@@ -154,6 +156,7 @@ void GenerateBuffOptions(BuffRewardState* state, int current_level) {
     state->show_confirm_button = false;
 }
 
+// Updates the Buff Reward state, checking for mouse clicks on options or the confirm button.
 void UpdateBuffReward(BuffRewardState* state, Player* player) {
     if (!state || !state->is_active || state->reward_claimed) return;
 
@@ -190,6 +193,7 @@ void UpdateBuffReward(BuffRewardState* state, Player* player) {
     }
 }
 
+// Renders the Buff Reward UI, including the background, option cards, text, and confirm button.
 void DrawBuffReward(BuffRewardState* state) {
     if (!state || !state->is_active) return;
 
@@ -281,6 +285,7 @@ void DrawBuffReward(BuffRewardState* state) {
     }
 }
 
+// Resets the Buff Reward state variables for next use.
 void ResetBuffReward(BuffRewardState* state) {
     if (!state) return;
     state->num_options = 0;
@@ -289,6 +294,7 @@ void ResetBuffReward(BuffRewardState* state) {
     state->selected_index = -1;
 }
 
+// Checks if the Buff Reward screen is currently active/visible.
 bool IsBuffRewardActive(BuffRewardState* state) {
     if (!state) return false;
     return state->is_active;

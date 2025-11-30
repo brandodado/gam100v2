@@ -6,7 +6,7 @@
 
 // --- Static variables for this state ---
 static CP_Font tutorial_font;
-static int tutorialPage;  
+static int tutorialPage;
 
 // --- Button Definitions ---
 #define TUTE_BUTTON_W 120.0f
@@ -20,19 +20,17 @@ typedef enum {
 } CardType;
 
 
-/**
- * \brief Helper function to draw a single button (for text)
- */
+// Helper function to draw a single navigation button (e.g., Next/Back).
 static void DrawTutorialButton(const char* text, float x, float y, float w, float h, int is_hovered, float fontSize)
 {
     CP_Settings_RectMode(CP_POSITION_CENTER);
 
     // Draw button rectangle
     if (is_hovered) {
-        CP_Settings_Fill(CP_Color_Create(150, 150, 150, 255)); 
+        CP_Settings_Fill(CP_Color_Create(150, 150, 150, 255));
     }
     else {
-        CP_Settings_Fill(CP_Color_Create(80, 80, 80, 255)); 
+        CP_Settings_Fill(CP_Color_Create(80, 80, 80, 255));
     }
 
     CP_Settings_StrokeWeight(2.0f);
@@ -50,9 +48,7 @@ static void DrawTutorialButton(const char* text, float x, float y, float w, floa
     CP_Font_DrawText(text, x, y + 2.0f);
 }
 
-/**
- * \brief Helper function to draw a key with a triangle symbol
- */
+// Helper function to draw a keyboard key graphic with a directional triangle icon.
 static void DrawKeyWithTriangle(float x_center, float y_center, float size, const char* direction)
 {
     // 1. Draw the box
@@ -101,10 +97,7 @@ static void DrawKeyWithTriangle(float x_center, float y_center, float size, cons
     CP_Graphics_DrawTriangle(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
 }
 
-// --- MODIFIED: NEW HELPER FUNCTION ---
-/**
- * \brief Draws a visual example of a reward card
- */
+// Draws a visual example of a reward card to explain game mechanics.
 static void DrawTutorialCardExample(float x, float y, float w, float h, CardType type, const char* title, const char* desc)
 {
     CP_Settings_RectMode(CP_POSITION_CENTER);
@@ -140,10 +133,7 @@ static void DrawTutorialCardExample(float x, float y, float w, float h, CardType
     CP_Font_DrawTextBox(desc, text_box_x, text_box_y, text_box_w);
 }
 
-// --- MODIFIED: NEW HELPER FUNCTION ---
-/**
- * \brief Draws a visual example of a buff reward
- */
+// Draws a visual example of a buff reward to explain boss mechanics.
 static void DrawTutorialBuffExample(float x, float y, float w, float h, const char* title, const char* desc)
 {
     CP_Settings_RectMode(CP_POSITION_CENTER);
@@ -170,6 +160,7 @@ static void DrawTutorialBuffExample(float x, float y, float w, float h, const ch
 }
 
 
+// Initializes the tutorial pages and font assets.
 void Tutorial_Init(void)
 {
     // Load the font for this state
@@ -179,6 +170,7 @@ void Tutorial_Init(void)
     tutorialPage = 1; // Always start on page 1
 }
 
+// Renders the current tutorial page and handles navigation between pages.
 void Tutorial_Update(void)
 {
     CP_Graphics_ClearBackground(CP_Color_Create(20, 25, 28, 255));
@@ -225,7 +217,7 @@ void Tutorial_Update(void)
 
     // --- Multi-page Logic ---
 
-    // --- MODIFIED: This is now Page 1 (Controls) ---
+    // --- Page 1 (Controls) ---
     if (tutorialPage == 1)
     {
         // --- Define a common Y for the top of the diagrams ---
@@ -288,7 +280,7 @@ void Tutorial_Update(void)
         CP_Font_DrawText("MB2 (RIGHT): (Not Used)", col2_center_x, text_top_y + line_height);
 
 
-        // --- MODIFIED: No "Back" button on Page 1 ---
+        // --- No "Back" button on Page 1 ---
 
         // --- Draw "Next" Button ---
         float next_btn_x = panel_right - 80.0f;
@@ -302,10 +294,10 @@ void Tutorial_Update(void)
             tutorialPage = 2; // Go to new page 2
         }
     }
-    // --- MODIFIED: This is now Page 2 ---
+    // --- Page 2 ---
     else if (tutorialPage == 2)
     {
-        // --- MODIFIED: Updated text for new controls ---
+        // --- Text for new controls ---
         const char* page1_text = "THE GOAL: Defeat all 9 levels.\n\n"
             "BASIC COMBAT:\n"
             "1. Select a card with (A/D) or (Mouse Click). First card is auto-selected.\n"
@@ -347,7 +339,7 @@ void Tutorial_Update(void)
             }
         }
     }
-    // --- MODIFIED: This is now Page 3 ---
+    // --- Page 3 ---
     else if (tutorialPage == 3)
     {
         const char* page2_text = "HOW TO GET STRONGER (1/2): CARD REWARDS\n\n"
@@ -393,7 +385,7 @@ void Tutorial_Update(void)
             }
         }
     }
-    // --- MODIFIED: This is now Page 4 ---
+    // --- Page 4 ---
     else if (tutorialPage == 4)
     {
         const char* page3_text = "HOW TO GET STRONGER (2/2): BUFF REWARDS\n\n"
@@ -435,7 +427,7 @@ void Tutorial_Update(void)
             }
         }
     }
-    // --- MODIFIED: This is now Page 5 ---
+    // --- Page 5 ---
     else if (tutorialPage == 5)
     {
         const char* page4_text = "BOSSES & CHECKPOINTS\n\n"
@@ -443,8 +435,6 @@ void Tutorial_Update(void)
             "CHECKPOINTS: If you die, you can click 'Restart Stage' on the Game Over screen to retry the level.";
 
         CP_Font_DrawTextBox(page4_text, text_start_x, text_start_y, text_box_width);
-
-        // --- MODIFIED: Removed Game Over mock-up ---
 
         // --- Draw "Back" Button ---
         float back_btn_x = panel_left + 80.0f;
@@ -468,7 +458,7 @@ void Tutorial_Update(void)
             }
         }
     }
-    // --- MODIFIED: This is now Page 6 ---
+    // --- Page 6 ---
     else if (tutorialPage == 6)
     {
         const char* page6_text = "VICTORY & SCORING\n\n"
@@ -480,8 +470,6 @@ void Tutorial_Update(void)
             "Try to achieve a 3-star victory!";
 
         CP_Font_DrawTextBox(page6_text, text_start_x, text_start_y, text_box_width);
-
-        // --- MODIFIED: Removed Victory mock-up ---
 
         // --- "Back" Button ---
         float back_btn_x = panel_left + 80.0f;
@@ -509,6 +497,7 @@ void Tutorial_Update(void)
     }
 }
 
+// Frees the font resource for the tutorial state.
 void Tutorial_Exit(void)
 {
     // --- Fixes the memory leak ---

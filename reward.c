@@ -222,7 +222,7 @@ void DrawReward(RewardState* reward_state, Player* player) {
             }
             else {
                 // Grey out others
-                DrawCard(&reward_state->options[i].card, player);
+                DrawCard(&reward_state->options[i].card);
                 CP_Settings_Fill(CP_Color_Create(0, 0, 0, 150));
                 CP_Graphics_DrawRect(card_x, card_y,
                     reward_state->options[i].card.card_w,
@@ -248,7 +248,7 @@ void DrawReward(RewardState* reward_state, Player* player) {
         CP_Settings_Stroke(CP_Color_Create(0, 0, 0, 255));
         CP_Settings_StrokeWeight(1);
 
-        DrawCard(&reward_state->options[i].card, player);
+        DrawCard(&reward_state->options[i].card);
 
         // Draw "Current Bonus" text below card
         CP_Settings_Fill(CP_Color_Create(220, 220, 255, 255));

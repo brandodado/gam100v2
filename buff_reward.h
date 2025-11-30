@@ -1,36 +1,30 @@
+// System for granting passive buffs to the player after boss levels.
 #pragma once
 #include "cprocessing.h"
 #include <stdbool.h>
 
-// Forward declaration of Player
-// We can now use the typedef name directly
 typedef struct Player Player;
 
-// Defines the types of buffs the player can get
 typedef enum {
     BUFF_NONE,
-    BUFF_LIFESTEAL,     // Heal for 50% of damage dealt
-    BUFF_DESPERATE_DRAW, // Draw 3 cards if hand is empty
+    BUFF_LIFESTEAL,
+    BUFF_DESPERATE_DRAW,
     BUFF_DIVINE_STRIKE,
-    BUFF_SHIELD_BOOST,  // 25% shield buff
-    BUFF_ATTACK_UP,     // Increase base Attack
-
-    // --- MODIFIED: Added Lvl 6 Buffs ---
+    BUFF_SHIELD_BOOST,
+    BUFF_ATTACK_UP,
     BUFF_ATTACK_BOOST_35,
     BUFF_HEAL_BOOST_35,
     BUFF_SHIELD_BOOST_35
 } BuffType;
 
-// A single buff option to be displayed
 typedef struct {
     BuffType type;
     const char* title;
-    char description[200]; // MODIFIED: Changed to char[] to allow dynamic text
+    char description[200];
 } BuffOption;
 
 #define MAX_BUFF_OPTIONS 3
 
-// The state of the buff reward screen
 typedef struct {
     BuffOption options[MAX_BUFF_OPTIONS];
     int num_options;
@@ -43,12 +37,20 @@ typedef struct {
     float option_h;
 } BuffRewardState;
 
-// --- Function Declarations ---
-
+// Initializes the buff reward system.
 void InitBuffReward(BuffRewardState* state);
-// --- MODIFIED: Added current_level ---
+
+// Generates buff options in the state based on the current_level to determine the boss tier.
 void GenerateBuffOptions(BuffRewardState* state, int current_level);
+
+// Updates input and logic for the buff reward screen.
 void UpdateBuffReward(BuffRewardState* state, Player* player);
+
+// Renders the buff reward selection screen.
 void DrawBuffReward(BuffRewardState* state);
+
+// Resets the buff reward state.
 void ResetBuffReward(BuffRewardState* state);
+
+// Checks if the buff reward screen is active.
 bool IsBuffRewardActive(BuffRewardState* state);
